@@ -18,6 +18,7 @@ import yaml
 from dotenv import load_dotenv
 
 from contracts.hypothesis_spec import HypothesisSpec
+from dashboard import generate_dashboard
 from data import make_adapter, split_by_fraction
 from evaluation import build_report, print_report
 from holdout import HoldoutService
@@ -110,6 +111,11 @@ def main() -> None:
         print(f"\nToken kullanımı (üretici+critic): prompt={pt}, completion={ct}, toplam={pt+ct}")
 
     memory.close()
+
+    # Research dashboard (tek dosya, offline) — hocaya göstermek için
+    out = generate_dashboard(DB_PATH, HOLDOUT_DB, os.path.join(HERE, "dashboard.html"),
+                             campaign_name=campaign["name"])
+    print(f"\nDashboard: {out}")
 
 
 if __name__ == "__main__":
