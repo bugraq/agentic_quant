@@ -112,6 +112,18 @@ class MemoryStore:
     def total_experiments(self) -> int:
         return self.conn.execute("SELECT COUNT(*) FROM experiment").fetchone()[0]
 
+    def max_hypothesis_number(self) -> int:
+        """Devam (resume) için: en yüksek hyp_XXXX numarası. Yoksa 0."""
+        row = self.conn.execute(
+            "SELECT MAX(CAST(SUBSTR(hypothesis_id, 5) AS INTEGER)) "
+            "FROM experiment WHERE hypothesis_id LIKE 'hyp_%'").fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
+
+    def all_hypothesis_jsons(self) -> list[str]:
+        """NoveltyIndex'i koşular-arası yeniden kurmak için tüm hipotezler."""
+        return [r[0] for r in self.conn.execute(
+            "SELECT hypothesis_json FROM experiment WHERE hypothesis_json IS NOT NULL")]
+
     def leaderboard(self, limit: int = 10) -> list[tuple]:
         """Kabul edilenler, Sharpe'a göre (Doküman: campaign leaderboard)."""
         return self.conn.execute(

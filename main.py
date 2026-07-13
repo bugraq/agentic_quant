@@ -12,6 +12,7 @@ Kod DEĞİŞMEZ.
 """
 from __future__ import annotations
 
+import argparse
 import os
 
 import yaml
@@ -21,7 +22,7 @@ from contracts.hypothesis_spec import HypothesisSpec
 from dashboard import generate_dashboard
 from data import make_adapter, split_by_fraction
 from evaluation import build_report, print_report
-from holdout import HoldoutService
+from holdout import HoldoutError, HoldoutService
 from llm import make_critic, make_provider
 from memory import MemoryStore
 from orchestrator import CampaignConfig, run_campaign
@@ -37,6 +38,11 @@ def load_yaml(name: str) -> dict:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Otonom quant araştırma kampanyası")
+    parser.add_argument("--fresh", action="store_true",
+                        help="Yeni kampanya: hafızayı SIFIRLA. Varsayılan: mevcut kampanyaya DEVAM et.")
+    args = parser.parse_args()
+
     load_dotenv(os.path.join(HERE, ".env"))   # API key'i ortama yükle (koda girmez)
     campaign = load_yaml("campaign.yaml")["campaign"]
     models = load_yaml("models.yaml")["models"]
@@ -61,9 +67,13 @@ def main() -> None:
     full = adapter.load()
     data, holdout_data = split_by_fraction(full, data_cfg.get("research_fraction", 0.7))
 
-    # Temiz başlangıç için eski hafızayı sil
-    if os.path.exists(DB_PATH):
-        os.remove(DB_PATH)
+    # DEVAM (varsayılan) veya SIFIRLA (--fresh). Devam: novelty/çoklu-test/öğrenme
+    # koşular arası birikir; aynı hipotez tekrar üretilmez (Doküman: campaign = çok deney).
+    if args.fresh:
+        for p in (DB_PATH, HOLDOUT_DB):
+            if os.path.exists(p):
+                os.remove(p)
+        print("(--fresh) Yeni kampanya: hafıza sıfırlandı.")
     memory = MemoryStore(DB_PATH)
 
     print(f"=== Kampanya: {campaign['name']} ===")
@@ -90,15 +100,19 @@ def main() -> None:
     max_cand = int(policy.get("maximum_candidates", 20))
     candidates = memory.accepted_hypotheses(limit=max_cand)
     if candidates:
-        if os.path.exists(HOLDOUT_DB):
-            os.remove(HOLDOUT_DB)
+        # Holdout audit KORUNUR (one-shot koşular arası): zaten değerlendirilmiş
+        # aday tekrar test edilmez (Doküman 10.3).
         holdout = HoldoutService(holdout_data, audit_path=HOLDOUT_DB,
                                  max_candidates=max_cand,
                                  min_sharpe=cfg.min_acceptance_sharpe, cost_bps=cfg.cost_bps)
         print(f"\n=== HOLDOUT (kilitli dönem, one-shot, {len(candidates)} aday) ===")
         for hid, hjson, research_sharpe in candidates:
             hyp = HypothesisSpec.model_validate_json(hjson)
-            res = holdout.evaluate(hyp)
+            try:
+                res = holdout.evaluate(hyp)
+            except HoldoutError:
+                print(f"  {hid}  (zaten değerlendirildi — one-shot, atlandı)")
+                continue
             flag = "GEÇTİ" if res.passed else "KALDI"
             print(f"  {hid}  araştırma Sharpe={research_sharpe:.2f} -> "
                   f"holdout Sharpe={res.sharpe:.2f}  [{flag}]")

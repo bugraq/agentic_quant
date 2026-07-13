@@ -67,6 +67,13 @@ tek tek `dummy → gerçek` yap. Baştan gerçek yapılacak iki şey:
 `main.py` çalışınca `dashboard.html` üretilir (offline, tarayıcıda aç). Ayrıca:
 `python -m dashboard.report`
 
+### Kampanya kalıcılığı (devam vs sıfırla)
+- **Varsayılan:** `python main.py` mevcut kampanyaya **DEVAM eder** — novelty, champion,
+  dersler, çoklu-test sayımı koşular arası birikir; aynı hipotez tekrar üretilmez.
+  Bir kampanya = çok deney (Doküman 4.1). Tekrar tekrar çalıştırıp büyütebilirsin.
+- **Yeni kampanya:** `python main.py --fresh` hafızayı sıfırlar.
+- Hafıza: `research_memory.sqlite` (episodic), `holdout_audit.sqlite` (one-shot log).
+
 ### LLM sağlayıcısı (esnek)
 `configs/models.yaml` → `provider: openrouter|vllm|openai_compatible|dummy`. Hepsi
 tek OpenAI-uyumlu istemci; geçiş = base_url + model + api_key ortam değişkeni.

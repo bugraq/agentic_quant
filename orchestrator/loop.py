@@ -111,7 +111,23 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
                  memory: MemoryStore, cfg: CampaignConfig, critic=None) -> None:
     from agents.quant_critic import DummyCritic
     critic = critic or DummyCritic()
-    novelty = NoveltyIndex()   # kampanya boyunca görülen sinyaller
+
+    # DEVAM (resume): ID sayacını ve NoveltyIndex'i hafızadan yeniden kur, böylece
+    # önceki koşularla aynı hipotez tekrar üretilmez ve numaralar çakışmaz.
+    start = memory.max_hypothesis_number()
+    if hasattr(provider, "_counter"):
+        provider._counter = start
+    novelty = NoveltyIndex()
+    seeded = 0
+    for hj in memory.all_hypothesis_jsons():
+        try:
+            novelty.add(HypothesisSpec.model_validate_json(hj))   # yapısal (sinyal df yok)
+            seeded += 1
+        except Exception:  # noqa: BLE001
+            pass
+    if start:
+        print(f"[devam] {start} önceki deney hafızada; novelty {seeded} sinyalle kuruldu.\n")
+
     bandit = ThompsonBandit([f.value for f in HypothesisFamily], seed=0)
     for i in range(cfg.max_experiments):
         remaining = cfg.max_experiments - i
