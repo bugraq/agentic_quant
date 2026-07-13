@@ -100,7 +100,8 @@ def _decide_mode(iteration: int, memory: MemoryStore):
 
 def _build_context(cfg: CampaignConfig, memory: MemoryStore, remaining: int,
                    mode: GenerationMode, parent: HypothesisSpec | None,
-                   suggested_family: str | None = None) -> ResearchContext:
+                   suggested_family: str | None = None,
+                   literature: list[str] | None = None) -> ResearchContext:
     priors = [
         ExperimentSummary(hypothesis_id=h, title=t, family=f, outcome=d,
                           headline_metric=(f"Sharpe {s:.2f}" if s is not None else None))
@@ -120,12 +121,14 @@ def _build_context(cfg: CampaignConfig, memory: MemoryStore, remaining: int,
         generation_mode=mode,
         parent_hypothesis=parent,
         suggested_family=suggested_family,
+        literature_mechanisms=literature or [],
         experiments_remaining=remaining,
     )
 
 
 def run_campaign(provider: HypothesisProvider, data: MarketData,
-                 memory: MemoryStore, cfg: CampaignConfig, critic=None) -> None:
+                 memory: MemoryStore, cfg: CampaignConfig, critic=None,
+                 literature: list[str] | None = None) -> None:
     from agents.quant_critic import DummyCritic
     critic = critic or DummyCritic()
 
@@ -159,7 +162,7 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
         # Yeni hipotez modunda bandit aile seçer (bütçe tahsisi); revision'da champion'ın ailesi
         suggested = bandit.select(memory.family_outcome_counts()) \
             if mode == GenerationMode.new else None
-        ctx = _build_context(cfg, memory, remaining, mode, parent, suggested)
+        ctx = _build_context(cfg, memory, remaining, mode, parent, suggested, literature)
 
         # 0) Hipotez üret — LLM geçerli çıktı veremezse turu atla (kampanya çökmesin)
         try:

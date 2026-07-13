@@ -70,8 +70,21 @@ def main() -> None:
     )
 
     # Model TAK-ÇALIŞTIR: üretici + bağımsız eleştirmen config'ten kurulur
-    provider = make_provider(models["hypothesis_generator"])
+    gen_cfg = models["hypothesis_generator"]
+    provider = make_provider(gen_cfg)
     critic = make_critic(models.get("quant_critic", {"provider": "dummy"}))
+
+    # Literatür grounding (Doküman 4.3): web araması ile gerçek faktörleri çek.
+    # Kampanya başına BİR KEZ (maliyet). models.yaml -> web_search: true ile açılır.
+    literature: list[str] = []
+    if gen_cfg.get("web_search") and hasattr(provider, "client"):
+        from agents.literature import fetch_literature_mechanisms
+        print("Literatür aranıyor (web_search)...")
+        literature = fetch_literature_mechanisms(
+            provider.client, provider.model, campaign["universe_description"])
+        for m in literature:
+            print(f"  • {m[:100]}")
+        print()
 
     # Veri: adaptörden (sentetik/gerçek config'ten) yüklenir, sonra araştırma /
     # KİLİTLİ holdout olarak bölünür. Kampanya yalnızca araştırma verisini görür.
@@ -98,7 +111,7 @@ def main() -> None:
     print(f"Sağlayıcı: {models['hypothesis_generator']['provider']} | "
           f"Bütçe: {cfg.max_experiments} deney\n")
 
-    run_campaign(provider, data, memory, cfg, critic=critic)
+    run_campaign(provider, data, memory, cfg, critic=critic, literature=literature)
 
     print("\n--- ÖZET ---")
     print(f"Toplam deney (multiple-testing muhasebesi): {memory.total_experiments()}")

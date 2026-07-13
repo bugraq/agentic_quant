@@ -121,6 +121,7 @@ def _build_user_prompt(ctx: ResearchContext) -> str:
         for e in ctx.prior_experiments
     ) or "  (henüz yok)"
     lessons = "\n".join(f"  - {l}" for l in ctx.lessons) or "  (henüz yok)"
+    literature = "\n".join(f"  - {m}" for m in ctx.literature_mechanisms)
 
     # Inversion: başarısız hipotezi ters çevir. Revision: champion'ı geliştir. Yeni: keşfet.
     if ctx.generation_mode.value == "inversion" and ctx.parent_hypothesis is not None:
@@ -150,10 +151,13 @@ CHAMPION:
         task = """GÖREV — YENİ: Derslere göre UMUT VERİCİ aileyi seç ya da hiç
 denenmemiş bir yön keşfet. ZAYIF aileleri (dersteki uyarılar) tekrarlama."""
 
+    lit_block = (f"\nLİTERATÜR (web'den gerçek faktörler — bunlardan İLHAM al, "
+                 f"DSL ile uygula):\n{literature}\n" if literature else "")
+
     return f"""Kampanya hedefi: {ctx.campaign_goal}
 Evren: {ctx.universe_description}
 Üretim modu: {ctx.generation_mode.value}
-
+{lit_block}
 DERSLER (geçmiş deneylerden — bunlara UY):
 {lessons}
 

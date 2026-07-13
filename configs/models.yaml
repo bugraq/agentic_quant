@@ -10,6 +10,7 @@ models:
     endpoint: null              # vLLM'e geçince: http://localhost:8000/v1
     temperature: 0.9            # üretimde yüksek çeşitlilik
     max_tokens: 4000
+    web_search: true            # literatür grounding (Doküman 4.3); kampanya başına 1 web araması
 
   quant_critic:               # BAĞIMSIZ eleştirmen (Doküman 15)
     provider: openrouter      # dummy | openrouter | vllm

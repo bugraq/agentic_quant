@@ -36,7 +36,8 @@ class OpenAICompatibleClient:
                              default_headers=default_headers or {})
 
     def chat(self, model: str, system: str, user: str, temperature: float = 0.7,
-             force_json: bool = True, max_tokens: int = 4000) -> LLMResponse:
+             force_json: bool = True, max_tokens: int = 4000,
+             web_search: bool = False) -> LLMResponse:
         kwargs: dict = dict(
             model=model,
             messages=[{"role": "system", "content": system},
@@ -46,6 +47,12 @@ class OpenAICompatibleClient:
         )
         if force_json:
             kwargs["response_format"] = {"type": "json_object"}
+        if web_search:
+            # OpenRouter web_search aracı (hoca örneği). SDK doğrulamasını atlamak
+            # için extra_body ile gönderilir; OpenRouter aramayı kendisi yürütür.
+            kwargs["extra_body"] = {"tools": [
+                {"type": "openrouter:web_search",
+                 "parameters": {"engine": "auto", "max_results": 5}}]}
         try:
             resp = self.client.chat.completions.create(**kwargs)
         except Exception:

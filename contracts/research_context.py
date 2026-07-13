@@ -61,6 +61,9 @@ class ResearchContext(BaseModel):
     lessons: list[str] = Field(
         default_factory=list,
         description="Semantic memory'den çıkarılan dersler — LLM'e geri besleme")
+    literature_mechanisms: list[str] = Field(
+        default_factory=list,
+        description="Web/literatür aramasından gelen gerçek faktörler (Doküman 4.3)")
 
     # Bandit'in bu tur için önerdiği aile (bütçe tahsisi)
     suggested_family: Optional[str] = None
