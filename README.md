@@ -58,8 +58,12 @@ tek tek `dummy → gerçek` yap. Baştan gerçek yapılacak iki şey:
 - [x] Critic ajanı (bağımsız LLM, farklı prompt+düşük sıcaklık, ekonomik mekanizma denetimi)
 - [x] DataAdapter (sentetik <-> gerçek tak-çalıştır); yfinance ile gerçek S&P 500 (survivorship uyarısıyla)
 - [x] Bandit bütçe tahsisi (Thompson sampling) — araştırma bütçesini aileler arasında başarıya göre dağıtır
+- [x] Research dashboard — tek dosyalık statik HTML (funnel, leaderboard, multiple-testing, holdout, aile perf.)
 - [ ] Kripto adaptörü (ccxt), point-in-time endeks üyeliği, delisting
-- [ ] (opsiyonel) Research dashboard, Pareto çok-amaçlı sıralama
+- [ ] (opsiyonel) Pareto çok-amaçlı sıralama, lineage grafiği
+
+`main.py` çalışınca `dashboard.html` üretilir (offline, tarayıcıda aç). Ayrıca:
+`python -m dashboard.report`
 
 ### LLM sağlayıcısı (esnek)
 `configs/models.yaml` → `provider: openrouter|vllm|openai_compatible|dummy`. Hepsi
