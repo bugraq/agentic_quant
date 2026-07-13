@@ -79,6 +79,9 @@ KRİTİK KURALLAR (yoksa hipotez reddedilir):
   - falsification.minimum_oos_sharpe gerçekçi olsun (0.3–0.8 arası).
   - TURNOVER KONTROLÜ: aşırı sık işlemden kaçın; çok kısa pencereler (1–3 gün)
     turnover'ı patlatır. Daha uzun pencereler (20+) tercih et.
+  - volatility, rolling_std, zscore, return vb. OPERATÖRDÜR — veri alanı DEĞİL.
+    Girdi olarak bir alan alırlar: {{"op":"volatility","window":20,"inputs":[
+    {{"op":"field","field":"close"}}]}}. 'volatility'yi field olarak KULLANMA.
   - DÜRÜST ETİKET: title, claim ve family, sinyalin GERÇEKTE yaptığıyla uyuşmalı.
     'regime-conditioned' diyorsan sinyalde conditional/greater_than/volatilite
     OLMALI; 'composite' diyorsan birden çok sinyali birleştirmelisin. Sade

@@ -170,6 +170,15 @@ class MemoryStore:
                FROM experiment WHERE sharpe IS NOT NULL
                ORDER BY sharpe DESC LIMIT 1""").fetchone()
 
+    def best_accepted(self) -> Optional[tuple]:
+        """En iyi KABUL EDİLMİŞ hipotez — revision champion'ı (Doküman 16.1).
+        Ham Sharpe yerine 'doğrulanmış' (gate+fold+robustness geçmiş) olanı seçer,
+        böylece reddedilmiş yüksek-Sharpe peşinde koşulmaz. (json, sharpe) | None."""
+        return self.conn.execute(
+            """SELECT hypothesis_json, sharpe FROM experiment
+               WHERE decision='accept' AND sharpe IS NOT NULL
+               ORDER BY sharpe DESC LIMIT 1""").fetchone()
+
     def worst_failed_hypothesis(self) -> Optional[tuple]:
         """En negatif Sharpe'lı reddedilen deney — inversion (ters çevirme) adayı.
         Ters çevrilirse kazanabilir. Döndürür: (hypothesis_json, sharpe) veya None."""

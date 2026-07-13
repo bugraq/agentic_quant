@@ -34,49 +34,64 @@ def _collect_ops(expr: Expression, acc: set) -> set:
     return acc
 
 
-def _signal_facts(hyp: HypothesisSpec) -> str:
-    """Critic'e verilecek deterministik yapı özeti — LLM DSL'i kendi parse etmesin."""
+def _label_honesty_issue(hyp: HypothesisSpec) -> "Issue | None":
+    """
+    DETERMİNİSTİK etiket-sinyal uyuşma kontrolü (LLM'e bırakılmaz).
+
+    Yalnızca YAPISAL bir söz veren aileler denetlenir: regime_conditioned
+    (koşullama gerekir), composite/cross_sectional_interaction (birleştirme
+    gerekir). Momentum/reversal/volume/volatility/liquidity TEK-faktör
+    ailelerdir; sade sinyalle TAM eşleşir, ekstra yapı GEREKTİRMEZ.
+    """
     ops = _collect_ops(hyp.signal, set())
     conditioning = bool(ops & {"conditional", "greater_than", "less_than"})
-    volatility = bool(ops & {"volatility", "rolling_std"})
-    combiner = bool(ops & {"multiply", "add", "subtract", "divide", "ratio"})
-    return (f"Operatörler: {sorted(ops)}\n"
-            f"  - Koşullama/rejim yapısı var mı: {'EVET' if conditioning else 'HAYIR'}\n"
-            f"  - Volatilite ölçümü var mı: {'EVET' if volatility else 'HAYIR'}\n"
-            f"  - Birden çok sinyal birleştiriliyor mu: {'EVET' if combiner or conditioning else 'HAYIR'}")
+    combiner = bool(ops & {"multiply", "add", "subtract", "divide", "ratio"}) or conditioning
+    fam = hyp.family.value
+    if fam == "regime_conditioned" and not conditioning:
+        return Issue(type="claim_signal_mismatch",
+                     description="family 'regime_conditioned' ama sinyalde koşullama "
+                                 "(conditional/greater_than) yok.",
+                     required_action="Sinyale rejim koşulu ekle ya da family'yi düzelt.")
+    if fam in ("composite", "cross_sectional_interaction") and not combiner:
+        return Issue(type="claim_signal_mismatch",
+                     description=f"family '{fam}' ama sinyal tek bir faktör — birleştirme yok.",
+                     required_action="Birden çok sinyali birleştir ya da family'yi düzelt.")
+    return None
 
 
 class Critic(Protocol):
     def review(self, hyp: HypothesisSpec) -> Decision: ...
 
 
+def _mismatch_decision(hyp: HypothesisSpec, issue: "Issue") -> Decision:
+    return Decision(hypothesis_id=hyp.hypothesis_id, decision=DecisionType.revise,
+                    source=DecisionSource.critic, severity=Severity.medium, issues=[issue])
+
+
 class DummyCritic:
-    """LLM yokken: her şeyi geçirir (pipeline'ı bloklamaz)."""
+    """LLM yok: sadece deterministik etiket-sinyal kontrolü (yapısal aileler)."""
 
     def review(self, hyp: HypothesisSpec) -> Decision:
+        issue = _label_honesty_issue(hyp)
+        if issue is not None:
+            return _mismatch_decision(hyp, issue)
         return Decision(hypothesis_id=hyp.hypothesis_id, decision=DecisionType.accept,
                         source=DecisionSource.critic, severity=Severity.low)
 
 
-_SYSTEM = """Sen kıdemli, şüpheci bir kantitatif araştırma eleştirmenisin. Sana bir
-hipotez veriliyor; SONUÇLARI görmeden yalnızca EKONOMİK muhakemeyi ve etiketlerin
-dürüstlüğünü denetliyorsun. Değerlendir:
+_SYSTEM = """Sen kıdemli bir kantitatif araştırma eleştirmenisin. Bir hipotezin
+yalnızca EKONOMİK muhakemesini değerlendir (sonuçları görmeden).
 
-  1. ETİKET-SİNYAL UYUŞMASI (en önemli): title/claim/family, sinyalin GERÇEKTE
-     yaptığıyla tutarlı mı? Sana SİNYAL YAPISI bölümünde deterministik bir analiz
-     verilecek; sinyali KENDİN parse etme, o analize güven. Kurallar:
-       - claim 'regime'/'rejim' diyorsa: 'Koşullama var mı' EVET olmalı.
-       - claim 'volatility' diyorsa: 'Volatilite var mı' EVET olmalı.
-       - claim 'composite'/'birleşik' diyorsa: 'Birden çok sinyal' EVET olmalı.
-     Gerekli özellik analizde EVET ise etiket DÜRÜSTTÜR -> mismatch verme, 'accept'.
-     Sadece iddia bir yapı vaat edip analizde o yapı HAYIR ise
-     -> decision='revise', type='claim_signal_mismatch'.
-  2. Ekonomik mekanizma tutarlı ve makul mü?
-  3. Bilinen bir faktörün yeniden adlandırılması mı?
+VARSAYILAN KARAR 'accept'tir. Momentum, reversal, volume, volatility, liquidity
+gibi KLASİK faktörler tamamen MEŞRUDUR; sade olmaları reddi GEREKTİRMEZ. Etiketin
+sinyal yapısına uyup uymadığı AYRI bir deterministik sistemce kontrol edilir; sen
+onunla ilgilenme.
 
-Klasik faktörler (momentum/reversal) meşrudur AMA doğru etiketlenmeli: sade
-momentum'a momentum de, 'regime-conditioned' deme. Yalın ve dürüst etiketli bir
-momentum -> 'accept'. İddiası sinyalini aşan (abartılı etiket) -> 'revise'.
+Yalnızca şu durumlarda 'revise'/'reject' ver:
+  - Ekonomik mekanizma açıkça tutarsız/anlamsız/kendisiyle çelişkili ise, VEYA
+  - Sinyalin yönü iddianın yönüyle açıkça ters ise (ör. claim 'kazananlar kazanır'
+    ama sinyal kaybedenleri long yapıyor).
+Şüphedeysen 'accept'. Basitlik, sadelik, klasik-faktör olması RED SEBEBİ DEĞİLDİR.
 
 SADECE şu şemada JSON döndür:
 {"decision": "accept|revise|reject", "severity": "low|medium|high",
@@ -89,8 +104,7 @@ def _user(hyp: HypothesisSpec) -> str:
             f"Aile: {hyp.family.value}\n"
             f"Ekonomik mekanizma: {hyp.economic_mechanism.type} — "
             f"{hyp.economic_mechanism.description}\n\n"
-            f"SİNYAL YAPISI (deterministik analiz — buna güven):\n{_signal_facts(hyp)}\n\n"
-            f"Bu hipotezi değerlendir ve JSON kararını ver.")
+            f"Bu hipotezin ekonomik muhakemesini değerlendir ve JSON kararını ver.")
 
 
 class LLMCritic:
@@ -103,6 +117,11 @@ class LLMCritic:
         self.total_completion_tokens = 0
 
     def review(self, hyp: HypothesisSpec) -> Decision:
+        # 1) DETERMİNİSTİK etiket-sinyal kontrolü (yapısal aileler) — LLM'e sorma
+        issue = _label_honesty_issue(hyp)
+        if issue is not None:
+            return _mismatch_decision(hyp, issue)
+        # 2) LLM yalnızca ÖZNEL ekonomik yargı için (varsayılan accept)
         resp = self.client.chat(self.model, _SYSTEM, _user(hyp),
                                 temperature=self.temperature, max_tokens=800)
         self.total_prompt_tokens += resp.prompt_tokens

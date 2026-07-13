@@ -70,11 +70,13 @@ def _decide_mode(iteration: int, memory: MemoryStore):
 
     Döndürür: (GenerationMode, parent_hypothesis | None, champion_sharpe | None)
     """
-    champion = memory.best_by_sharpe()   # (json, sharpe, decision) | None
-    if iteration < EXPLORE_ROUNDS or champion is None or (champion[1] or -1) <= 0:
+    # Champion = KABUL EDİLMİŞ en iyi hipotez (ham Sharpe peşinde koşma yok, Doküman 16.1).
+    champion = memory.best_accepted()   # (json, sharpe) | None
+    # Kabul edilmiş champion çıkana dek keşfe devam (reddedilmişi geliştirmeye çalışma).
+    if iteration < EXPLORE_ROUNDS or champion is None:
         return GenerationMode.new, None, (champion[1] if champion else None)
     # Exploit fazı: her 3. turda başarısız bir hipotezi TERS ÇEVİR (inversion),
-    # aksi halde champion'ı geliştir (revision).
+    # aksi halde kabul edilmiş champion'ı geliştir (revision).
     if iteration % 3 == 2:
         failed = memory.worst_failed_hypothesis()
         if failed:
