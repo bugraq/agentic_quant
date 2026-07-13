@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from contracts.decision import DecisionType
-from contracts.hypothesis_spec import HypothesisSpec
+from contracts.decision import Decision, DecisionSource, DecisionType, Issue, Severity
+from contracts.hypothesis_spec import HypothesisFamily, HypothesisSpec
 from contracts.research_context import (
     ExperimentSummary, GenerationMode, ResearchContext,
 )
@@ -20,10 +20,10 @@ from data.synthetic import MarketData
 from dsl import CompileError, compile_hypothesis, validate
 from evaluation import hard_gate_evaluate
 from llm import HypothesisProvider
-from contracts.decision import Decision, DecisionSource, DecisionType, Issue, Severity
 from memory import MemoryStore
 from memory.semantic import build_lessons
 from memory.similarity import NoveltyIndex
+from orchestrator.budget import ThompsonBandit
 from backtest import evaluate_signal
 from backtest.walk_forward import run_walk_forward
 from evaluation.robustness import run_robustness
@@ -71,7 +71,8 @@ def _decide_mode(iteration: int, memory: MemoryStore):
 
 
 def _build_context(cfg: CampaignConfig, memory: MemoryStore, remaining: int,
-                   mode: GenerationMode, parent: HypothesisSpec | None) -> ResearchContext:
+                   mode: GenerationMode, parent: HypothesisSpec | None,
+                   suggested_family: str | None = None) -> ResearchContext:
     priors = [
         ExperimentSummary(hypothesis_id=h, title=t, family=f, outcome=d,
                           headline_metric=(f"Sharpe {s:.2f}" if s is not None else None))
@@ -86,6 +87,7 @@ def _build_context(cfg: CampaignConfig, memory: MemoryStore, remaining: int,
         lessons=lessons,
         generation_mode=mode,
         parent_hypothesis=parent,
+        suggested_family=suggested_family,
         experiments_remaining=remaining,
     )
 
@@ -95,10 +97,14 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
     from agents.quant_critic import DummyCritic
     critic = critic or DummyCritic()
     novelty = NoveltyIndex()   # kampanya boyunca görülen sinyaller
+    bandit = ThompsonBandit([f.value for f in HypothesisFamily], seed=0)
     for i in range(cfg.max_experiments):
         remaining = cfg.max_experiments - i
         mode, parent, champ_sharpe = _decide_mode(i, memory)
-        ctx = _build_context(cfg, memory, remaining, mode, parent)
+        # Yeni hipotez modunda bandit aile seçer (bütçe tahsisi); revision'da champion'ın ailesi
+        suggested = bandit.select(memory.family_outcome_counts()) \
+            if mode == GenerationMode.new else None
+        ctx = _build_context(cfg, memory, remaining, mode, parent, suggested)
 
         # 0) Hipotez üret — LLM geçerli çıktı veremezse turu atla (kampanya çökmesin)
         try:

@@ -101,6 +101,10 @@ Aynısını kopyalama; ölçülebilir bir iyileştirme hedefle.
 
 CHAMPION:
 {parent_json}"""
+    elif ctx.suggested_family:
+        task = (f"GÖREV — YENİ: Araştırma bütçesi bu tur '{ctx.suggested_family}' "
+                f"ailesine ayrıldı. family alanını '{ctx.suggested_family}' yap ve bu "
+                f"mekanizmaya uygun, özgün bir hipotez üret. Zayıf aileleri tekrarlama.")
     else:
         task = """GÖREV — YENİ: Derslere göre UMUT VERİCİ aileyi seç ya da hiç
 denenmemiş bir yön keşfet. ZAYIF aileleri (dersteki uyarılar) tekrarlama."""
