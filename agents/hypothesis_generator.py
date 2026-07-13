@@ -24,19 +24,30 @@ class LLMGenerationError(Exception):
     """LLM geçerli bir HypothesisSpec üretemedi."""
 
 
+# ZENGİN örnek: iki farklı sinyali BİRLEŞTİREN composite (hacimle-teyitli reversal).
+# features bloğunda adlandırılmış sinyaller kurulur, signal'de çarpılır.
 _EXAMPLE = """{
   "hypothesis_id": "hyp_example",
-  "title": "60-day cross-sectional momentum",
-  "claim": "Past 60-day winners keep outperforming.",
-  "family": "momentum",
-  "economic_mechanism": {"type": "momentum", "description": "Underreaction to news.",
-                          "expected_failure_conditions": ["sharp reversals"]},
+  "title": "Volume-confirmed short-term reversal",
+  "claim": "Recent losers with abnormally high volume tend to reverse over the next days.",
+  "family": "composite",
+  "economic_mechanism": {"type": "behavioral_reversal",
+                          "description": "Panic selling on high volume overshoots fair value.",
+                          "expected_failure_conditions": ["information-driven selloffs"]},
   "universe": {"source": "sp500_point_in_time", "minimum_price": 5.0},
-  "features": [],
+  "features": [
+    {"name": "reversal_5d", "expression":
+      {"op": "negate", "inputs": [
+        {"op": "return", "window": 5, "inputs": [{"op": "field", "field": "close"}]}]}},
+    {"name": "abnormal_volume", "expression":
+      {"op": "zscore", "window": 60, "inputs": [{"op": "field", "field": "volume"}]}}
+  ],
   "signal": {"op": "cross_sectional_rank", "inputs": [
-      {"op": "return", "window": 60, "inputs": [{"op": "field", "field": "close"}]}]},
-  "portfolio": {"type": "cross_sectional_long_short", "long_quantile": 0.3,
-                "short_quantile": 0.3, "weighting": "equal", "sector_neutral": false},
+    {"op": "multiply", "inputs": [
+      {"op": "feature_ref", "name": "reversal_5d"},
+      {"op": "feature_ref", "name": "abnormal_volume"}]}]},
+  "portfolio": {"type": "cross_sectional_long_short", "long_quantile": 0.2,
+                "short_quantile": 0.2, "weighting": "equal", "sector_neutral": false},
   "execution": {"signal_time": "close_t", "trade_time": "open_t_plus_1",
                 "holding_period_days": 5, "rebalance": "daily"},
   "falsification": {"minimum_oos_sharpe": 0.5, "maximum_turnover": 30.0,
@@ -91,6 +102,13 @@ KRİTİK KURALLAR (yoksa hipotez reddedilir):
     'regime-conditioned' diyorsan sinyalde conditional/greater_than/volatilite
     OLMALI; 'composite' diyorsan birden çok sinyali birleştirmelisin. Sade
     momentum'a 'momentum' de, abartılı etiket yapıştırma (critic reddeder).
+  - ZENGİNLİK ve ÇEŞİTLİLİK (önemli): Yalnızca cross_sectional_rank(return(N)) gibi
+    TEK-faktörlü basit yapılar üretme. Mümkün olduğunda features bloğunda 2+ FARKLI
+    sinyal kur ve anlamlı biçimde BİRLEŞTİR (multiply/subtract/conditional).
+    Örnek fikirler: momentum × düşük-volatilite, hacimle-teyitli reversal,
+    rejim-koşullu (yüksek/düşük volatilitede farklı davranan) strateji,
+    volatilite-ayarlı momentum, likidite-filtreli değer. Farklı ekonomik
+    mekanizmalar dene — her tur aynı momentum'u tekrarlama.
   - Şema tam olarak şu örnekteki gibi olmalı:
 
 {_EXAMPLE}

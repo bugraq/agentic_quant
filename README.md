@@ -61,6 +61,9 @@ tek tek `dummy → gerçek` yap. Baştan gerçek yapılacak iki şey:
 - [x] Research dashboard — funnel, leaderboard, hipotez detayı, multiple-testing, holdout, aile perf., soy ağacı
 - [x] Reproducibility metadata (model, prompt/output hash, seed) — her deney yeniden üretilebilir (Doküman 17.3/25.5)
 - [x] Lineage (soy ağacı) + inversion modu (başarısızı ters çevir) + universe filtreleri + ek-gecikme robustness
+- [x] Pareto çok-amaçlı sıralama (Sharpe alt-sınır + drawdown + turnover) + muhafazakâr skor
+- [x] Tam kampanya config'i (izin verilen alan/ufuk/operatör, bütçe, risk kısıtları) — hepsi koda bağlı
+- [x] Kampanya kalıcılığı (varsayılan devam / `--fresh` sıfırla)
 - [ ] Kripto adaptörü (ccxt), point-in-time endeks üyeliği, delisting
 - [ ] (opsiyonel) Pareto çok-amaçlı sıralama, lineage grafiği
 
