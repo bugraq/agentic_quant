@@ -49,8 +49,8 @@ def test_generate_dashboard():
         generate_dashboard(db, os.path.join(d, "yok.sqlite"), out, campaign_name="test")
         assert os.path.exists(out)
         content = open(out, encoding="utf-8").read()
-        for token in ["Research Dashboard", "Leaderboard", "Pipeline Funnel",
-                      "Multiple Testing", "hyp_d1"]:
+        for token in ["Araştırma Paneli", "En İyi Stratejiler", "Araştırma Hunisi",
+                      "Çoklu Test", "Holdout", "hyp_d1"]:
             assert token in content, f"eksik bölüm: {token}"
         print("  [ok] dashboard tüm bölümlerle üretildi")
 
