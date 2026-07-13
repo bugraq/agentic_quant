@@ -232,12 +232,19 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
             print(f"{tag} -> {static.decision.value.upper()} (statik): {reason}")
             continue
 
-        # 3a) Yapısal yenilik kontrolü (backtest'ten ÖNCE — bütçe korur)
-        dup = novelty.check_structural(hyp)
-        if dup:
-            rec(hyp, _duplicate_decision(hyp, dup, "yapısal"), STAGE_DUPLICATE)
-            print(f"{tag} -> DUPLICATE (yapısal, ~{dup}) — backtest atlandı")
-            continue
+        # 3a) Yapısal yenilik kontrolü (backtest'ten ÖNCE — bütçe korur).
+        # INVERSION modunda ATLANIR: yapısal imza (operatör çok-kümesi) işareti
+        # ayırt edemez — büyük bir ağaca negate eklemek Jaccard'ı ~aynı bırakır.
+        # "Tersini dene" deyip tersini yapısal-duplicate saymak çelişkiydi
+        # (gerçek koşuda 2/8 deney böyle çöpe gitti). Tembel/sahte inversion'ı
+        # (gerçekte ters çevrilmemiş kopya) 3b'deki İŞARETLİ davranışsal kontrol
+        # yine yakalar: corr>+0.95 duplicate, corr≈-1 yeni bahis (serbest).
+        if mode != GenerationMode.inversion:
+            dup = novelty.check_structural(hyp)
+            if dup:
+                rec(hyp, _duplicate_decision(hyp, dup, "yapısal"), STAGE_DUPLICATE)
+                print(f"{tag} -> DUPLICATE (yapısal, ~{dup}) — backtest atlandı")
+                continue
 
         # 3a2) Quant Critic — BAĞIMSIZ ekonomik inceleme (backtest'ten önce, bütçe korur)
         try:

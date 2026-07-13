@@ -48,10 +48,56 @@ def test_first_is_never_duplicate():
     print("  [ok] ilk hipotez duplicate değil")
 
 
+def test_structural_check_is_sign_blind():
+    """NEDEN inversion modunda yapısal kontrol atlanıyor (loop 3a):
+    büyük bir ağaca negate eklemek operatör çok-kümesini ~aynı bırakır;
+    yapısal imza bir sinyalle TERSİNİ ayırt EDEMEZ. Bu test o körlüğü
+    belgeler — davranış değişirse (imza işaret-duyarlı olursa) loop'taki
+    atlama kaldırılabilir."""
+    # Gerçekçi boyutta (LLM'in ürettiği gibi) çok-faktörlü ağaç: ~11 token.
+    # Jaccard = n/(n+1) olduğundan körlük ancak n >= 10'da 0.90 eşiğini aşar —
+    # gerçek koşudaki duplicate'ler de böyle büyük ağaçlardı.
+    big = Expression(op="multiply", inputs=[
+        Expression(op="subtract", inputs=[
+            Expression(op="return", window=5, inputs=[
+                Expression(op="field", field="close")]),
+            Expression(op="rolling_mean", window=20, inputs=[
+                Expression(op="field", field="close")])]),
+        Expression(op="multiply", inputs=[
+            Expression(op="zscore", window=60, inputs=[
+                Expression(op="field", field="volume")]),
+            Expression(op="volatility", window=20, inputs=[
+                Expression(op="field", field="close")])])])
+    sig = Expression(op="cross_sectional_rank", inputs=[big])
+    inverted = Expression(op="cross_sectional_rank", inputs=[
+        Expression(op="negate", inputs=[big])])
+    idx = NoveltyIndex()
+    idx.add(_hyp("hyp_a", sig))
+    assert idx.check_structural(_hyp("hyp_b", inverted)) == "hyp_a", \
+        "yapısal imza işaret-duyarlı olmuş; loop'taki inversion atlaması gözden geçirilebilir"
+    print("  [ok] yapısal imza işaret-körü (inversion'da atlanmasının gerekçesi)")
+
+
+def test_behavioral_signed_correlation():
+    """İşaretli davranışsal kontrol: tembel kopya (+corr) duplicate,
+    gerçek inversion (-corr) YENİ bahis — inversion modunun asıl hakemi."""
+    import numpy as np
+    import pandas as pd
+    rng = np.random.default_rng(0)
+    sig = pd.DataFrame(rng.normal(size=(200, 15)))
+    idx = NoveltyIndex()
+    idx.add(_hyp("hyp_a", _mom(60)), signal=sig)
+    assert idx.check_behavioral(sig * 1.0001) == "hyp_a", "tembel kopya kaçtı"
+    assert idx.check_behavioral(-sig) is None, "gerçek inversion duplicate sayıldı"
+    print("  [ok] davranışsal kontrol işaretli: kopya yakalanır, inversion serbest")
+
+
 def main():
     test_identical_structure_is_duplicate()
     test_different_window_not_duplicate()
     test_first_is_never_duplicate()
+    test_structural_check_is_sign_blind()
+    test_behavioral_signed_correlation()
     print("OK — benzerlik/yenilik kontrolü çalışıyor.")
 
 

@@ -57,7 +57,7 @@ campaign:
 
   # --- Bütçe (Campaign Manager) ---
   budget:
-    maximum_experiments: 8
+    maximum_experiments: 24        # 8 çok azdı; ~570 hisselik evrende anlamlı arama için
     maximum_llm_tokens: 300000     # bu bütçe aşılınca kampanya durur
     cost_bps: 5.0                  # backtest işlem maliyeti (bps)
     parameter_optimization: true   # kabul sonrası pencereleri optimizer arar (LLM değil)

@@ -87,11 +87,14 @@ tek tek `dummy → gerçek` yap. Baştan gerçek yapılacak iki şey:
 `main.py` çalışınca `dashboard.html` üretilir (offline, tarayıcıda aç). Ayrıca:
 `python -m dashboard.report`
 
-### Kampanya kalıcılığı (devam vs sıfırla)
+### Kampanya kalıcılığı (devam vs sıfırla) ve holdout
 - **Varsayılan:** `python main.py` mevcut kampanyaya **DEVAM eder** — novelty, champion,
   dersler, çoklu-test sayımı koşular arası birikir; aynı hipotez tekrar üretilmez.
   Bir kampanya = çok deney (Doküman 4.1). Tekrar tekrar çalıştırıp büyütebilirsin.
 - **Yeni kampanya:** `python main.py --fresh` hafızayı sıfırlar.
+- **Holdout AYRI komuttur:** `python main.py --holdout` — kampanya koşusu kilitli
+  döneme ASLA dokunmaz; kabul edilen adaylar ancak kampanya bitti kararıyla, bir kez
+  (one-shot, audit log'lu) sınanır (Doküman 10.3 — insan-döngüsü sızıntısını da kapatır).
 - Hafıza: `research_memory.sqlite` (episodic), `holdout_audit.sqlite` (one-shot log).
 
 ### LLM sağlayıcısı (esnek)

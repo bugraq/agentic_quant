@@ -1,14 +1,19 @@
 """
 Walking Skeleton — uçtan uca araştırma döngüsü.
 
-Bir kampanyayı başlatır: dummy LLM sabit katalogdan hipotez üretir, her biri
-derlenir -> sızıntı kontrolünden geçer -> backtest edilir -> hard gate ->
-hafızaya (SQLite) yazılır. Sonunda özet + leaderboard basılır.
+İki mod:
+  python main.py            Kampanya koşusu (hipotez üret -> test -> hafıza).
+                            HOLDOUT'A DOKUNMAZ — araştırma istediği kadar
+                            tekrarlanabilir, kilitli dönem tüketilmez.
+  python main.py --holdout  YALNIZCA holdout değerlendirmesi (LLM yok):
+                            hafızadaki kabul edilmiş adaylar kilitli dönemde
+                            BİR KEZ sınanır (one-shot, audit log). Kampanya
+                            bittiğinde, bilinçli bir kararla çağrılır.
 
-Modeli gerçek LLM'e çevirmek için: configs/models.yaml -> provider: anthropic.
-Kod DEĞİŞMEZ.
+Bu ayrım Doküman 10.3'ün gereğidir: holdout her koşunun sonunda otomatik
+tüketilirse araştırma-değerlendirme ayrımı fiilen erir (insan-döngüsü sızıntısı).
 
-Çalıştır:  ./.venv/Scripts/python.exe main.py
+Modeli değiştirmek için: configs/models.yaml. Kod DEĞİŞMEZ.
 """
 from __future__ import annotations
 
@@ -37,21 +42,11 @@ def load_yaml(name: str) -> dict:
         return yaml.safe_load(f)
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Otonom quant araştırma kampanyası")
-    parser.add_argument("--fresh", action="store_true",
-                        help="Yeni kampanya: hafızayı SIFIRLA. Varsayılan: mevcut kampanyaya DEVAM et.")
-    args = parser.parse_args()
-
-    load_dotenv(os.path.join(HERE, ".env"))   # API key'i ortama yükle (koda girmez)
-    campaign = load_yaml("campaign.yaml")["campaign"]
-    models = load_yaml("models.yaml")["models"]
-    data_cfg = load_yaml("data.yaml")["data"]
-
+def build_config(campaign: dict) -> CampaignConfig:
     budget = campaign.get("budget", {})
     risk = campaign.get("risk_constraints", {})
     hpol = campaign.get("holdout_policy", {})
-    cfg = CampaignConfig(
+    return CampaignConfig(
         goal=campaign["goal"],
         universe_description=campaign["universe_description"],
         allowed_fields=campaign.get("allowed_fields", []),
@@ -71,6 +66,85 @@ def main() -> None:
         anonymize_universe=bool(campaign.get("anonymize_universe", True)),
     )
 
+
+def load_data(campaign: dict, data_cfg: dict, research_fraction: float):
+    """Veri yükle ve araştırma / KİLİTLİ holdout olarak böl (tek yerden)."""
+    src = data_cfg.get("source")
+    if src in ("yfinance", "sp500_pit"):
+        data_cfg.setdefault(src, {})
+        data_cfg[src]["start"] = str(campaign["start_date"])
+        data_cfg[src]["end"] = str(campaign["end_date"])
+    full = make_adapter(data_cfg).load()
+    return split_by_fraction(full, research_fraction)
+
+
+def run_holdout_mode(campaign: dict, cfg: CampaignConfig, holdout_data) -> None:
+    """--holdout: hafızadaki kabul edilmiş adayları kilitli dönemde sına.
+
+    LLM'siz, deterministik son sınav. One-shot: aynı aday ikinci kez
+    değerlendirilMEZ (audit DB koşular arası korunur).
+    """
+    if not os.path.exists(DB_PATH):
+        print("Hafıza yok (research_memory.sqlite). Önce kampanya koş: python main.py")
+        return
+    memory = MemoryStore(DB_PATH)
+    policy = campaign.get("holdout_policy", {}) or {}
+    max_cand = int(policy.get("maximum_candidates", 20))
+    candidates = memory.accepted_hypotheses(limit=max_cand)
+    if not candidates:
+        print("Holdout adayı yok: hafızada kabul edilmiş hipotez bulunmuyor.")
+        memory.close()
+        return
+
+    holdout = HoldoutService(holdout_data, audit_path=HOLDOUT_DB,
+                             max_candidates=max_cand,
+                             min_sharpe=cfg.min_acceptance_sharpe,
+                             cost_bps=cfg.cost_bps)
+    print(f"=== HOLDOUT (kilitli dönem, one-shot, {len(candidates)} aday) ===")
+    for hid, hjson, research_sharpe in candidates:
+        hyp = HypothesisSpec.model_validate_json(hjson)
+        try:
+            res = holdout.evaluate(hyp)
+        except HoldoutError as e:
+            print(f"  {hid}  atlandı: {e}")
+            continue
+        flag = "GEÇTİ" if res.passed else "KALDI"
+        print(f"  {hid}  araştırma Sharpe={research_sharpe:.2f} -> "
+              f"holdout Sharpe={res.sharpe:.2f}  [{flag}]")
+    holdout.close()
+    memory.close()
+
+    out = generate_dashboard(DB_PATH, HOLDOUT_DB, os.path.join(HERE, "dashboard.html"),
+                             campaign_name=campaign["name"])
+    print(f"\nDashboard: {out}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Otonom quant araştırma kampanyası")
+    parser.add_argument("--fresh", action="store_true",
+                        help="Yeni kampanya: hafızayı SIFIRLA. Varsayılan: mevcut kampanyaya DEVAM et.")
+    parser.add_argument("--holdout", action="store_true",
+                        help="Kampanya KOŞMA; hafızadaki kabul edilmiş adayları kilitli "
+                             "holdout döneminde değerlendir (one-shot, LLM'siz).")
+    args = parser.parse_args()
+    if args.fresh and args.holdout:
+        parser.error("--fresh ile --holdout birlikte kullanılamaz "
+                     "(sıfırlanmış hafızada holdout adayı olmaz).")
+
+    load_dotenv(os.path.join(HERE, ".env"))   # API key'i ortama yükle (koda girmez)
+    campaign = load_yaml("campaign.yaml")["campaign"]
+    models = load_yaml("models.yaml")["models"]
+    data_cfg = load_yaml("data.yaml")["data"]
+    cfg = build_config(campaign)
+
+    # Veri her iki modda da gerekli (holdout modu kilitli dilimi kullanır).
+    data, holdout_data = load_data(campaign, data_cfg, cfg.research_fraction)
+
+    if args.holdout:
+        run_holdout_mode(campaign, cfg, holdout_data)
+        return
+
+    # ---- Kampanya modu (holdout'a DOKUNULMAZ) ----
     # Model TAK-ÇALIŞTIR: üretici + bağımsız eleştirmen config'ten kurulur
     gen_cfg = models["hypothesis_generator"]
     provider = make_provider(gen_cfg)
@@ -91,18 +165,6 @@ def main() -> None:
         for m in literature:
             print(f"  • {m[:100]}")
         print()
-
-    # Veri: adaptörden (sentetik/gerçek config'ten) yüklenir, sonra araştırma /
-    # KİLİTLİ holdout olarak bölünür. Kampanya yalnızca araştırma verisini görür.
-    # Tarih aralığı tek kaynak: campaign.yaml (yfinance adaptörüne enjekte edilir).
-    src = data_cfg.get("source")
-    if src in ("yfinance", "sp500_pit"):
-        data_cfg.setdefault(src, {})
-        data_cfg[src]["start"] = str(campaign["start_date"])
-        data_cfg[src]["end"] = str(campaign["end_date"])
-    adapter = make_adapter(data_cfg)
-    full = adapter.load()
-    data, holdout_data = split_by_fraction(full, cfg.research_fraction)
 
     # DEVAM (varsayılan) veya SIFIRLA (--fresh). Devam: novelty/çoklu-test/öğrenme
     # koşular arası birikir; aynı hipotez tekrar üretilmez (Doküman: campaign = çok deney).
@@ -132,28 +194,12 @@ def main() -> None:
     rows = build_report(backtested)
     print_report(rows, n_trials=len(backtested))
 
-    # Holdout değerlendirmesi — araştırmadan AYRI, kilitli dönem, one-shot.
-    policy = campaign.get("holdout_policy", {}) or {}
-    max_cand = int(policy.get("maximum_candidates", 20))
-    candidates = memory.accepted_hypotheses(limit=max_cand)
-    if candidates:
-        # Holdout audit KORUNUR (one-shot koşular arası): zaten değerlendirilmiş
-        # aday tekrar test edilmez (Doküman 10.3).
-        holdout = HoldoutService(holdout_data, audit_path=HOLDOUT_DB,
-                                 max_candidates=max_cand,
-                                 min_sharpe=cfg.min_acceptance_sharpe, cost_bps=cfg.cost_bps)
-        print(f"\n=== HOLDOUT (kilitli dönem, one-shot, {len(candidates)} aday) ===")
-        for hid, hjson, research_sharpe in candidates:
-            hyp = HypothesisSpec.model_validate_json(hjson)
-            try:
-                res = holdout.evaluate(hyp)
-            except HoldoutError:
-                print(f"  {hid}  (zaten değerlendirildi — one-shot, atlandı)")
-                continue
-            flag = "GEÇTİ" if res.passed else "KALDI"
-            print(f"  {hid}  araştırma Sharpe={research_sharpe:.2f} -> "
-                  f"holdout Sharpe={res.sharpe:.2f}  [{flag}]")
-        holdout.close()
+    # Holdout BİLEREK burada koşulmaz (Doküman 10.3): her koşuda otomatik
+    # tüketilseydi kilitli dönem fiilen araştırma verisine dönerdi.
+    n_accepted = len(memory.accepted_hypotheses())
+    if n_accepted:
+        print(f"\nHoldout adayı bekliyor: {n_accepted} kabul edilmiş hipotez. "
+              f"Kampanya bitti diyorsan: python main.py --holdout")
 
     # Token/maliyet görünürlüğü (Doküman 17.3) — üretici + eleştirmen
     pt = getattr(provider, "total_prompt_tokens", 0) + getattr(critic, "total_prompt_tokens", 0)
