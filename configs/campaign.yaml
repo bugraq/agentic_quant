@@ -1,9 +1,25 @@
-# Kampanya konfigürasyonu (Doküman 4.1) — iskelet sürüm
+# Kampanya konfigürasyonu (Doküman 4.1)
+# Campaign Manager bu sınırları UYGULAR: izin verilen alanlar/operatörler/ufuklar,
+# deney + token bütçesi, risk kısıtları, holdout erişimi. Buradaki her alan kodda
+# gerçekten kullanılır (dekoratif değil).
 campaign:
-  name: skeleton_daily_alpha_v0
-  universe: sp500_point_in_time      # iskelette sentetik veriyle temsil ediliyor
+  name: sp500_daily_alpha_v1
+  universe: sp500_point_in_time
   universe_description: "20 ABD hissesi, günlük bar, point-in-time (sentetik momentum)"
   goal: "Kesitsel günlük long-short alpha ara"
+  start_date: 2015-01-01           # araştırma+holdout kapsayan tam aralık
+  end_date: 2020-12-31
+
+  # --- İzin verilen strateji uzayı (Campaign Manager kısıtları) ---
+  allowed_fields:                  # LLM yalnızca bu veri alanlarını kullanabilir
+    - open
+    - high
+    - low
+    - close
+    - adjusted_close
+    - volume
+    - dollar_volume
+    - market_cap
 
   allowed_operators:
     # temel
@@ -20,18 +36,32 @@ campaign:
     - winsorize
     - normalize
     - demean
-    # koşullama / rejim (bunlar olmadan 'regime-conditioned' yazılamaz)
+    # koşullama / rejim
     - conditional
     - greater_than
     - less_than
     - multiply
     - subtract
 
-  maximum_experiments: 8
-  cost_bps: 5.0
-  min_acceptance_sharpe: 0.5      # kabul için gereken minimum OOS Sharpe (sabit, LLM gameleyemez)
+  allowed_horizons: [5, 10, 20, 60, 90, 120]     # kullanılabilir pencere/ufuklar
+  allowed_rebalance: [daily, weekly, monthly]
+  portfolio_types: [cross_sectional_long_short, long_only]
 
-  # İskelette henüz kullanılmıyor; sonraki fazlarda devreye girecek
+  # --- Bütçe (Campaign Manager) ---
+  budget:
+    maximum_experiments: 8
+    maximum_llm_tokens: 300000     # bu bütçe aşılınca kampanya durur
+    cost_bps: 5.0                  # backtest işlem maliyeti (bps)
+
+  # --- Risk kısıtları (hard gate; sabit, LLM gameleyemez) ---
+  risk_constraints:
+    min_acceptance_sharpe: 0.5     # kabul için minimum OOS Sharpe
+    max_drawdown: 0.40             # üstü doğrudan red
+    max_turnover: 300.0            # yıllık; üstü doğrudan red
+    min_positive_folds: 0.5        # walk-forward tutarlılık eşiği
+
+  # --- Holdout politikası (Doküman 10.3) ---
   holdout_policy:
     access_mode: one_shot
     maximum_candidates: 20
+    research_fraction: 0.7         # kalan %30 KİLİTLİ holdout

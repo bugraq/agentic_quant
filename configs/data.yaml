@@ -1,19 +1,24 @@
 # Veri kaynağı — TAK-ÇALIŞTIR (sentetik <-> gerçek). Kod değişmez.
+# (research/holdout bölme oranı campaign.yaml -> holdout_policy.research_fraction'da.)
 data:
   source: synthetic          # synthetic | yfinance
 
   synthetic:
     kind: momentum           # momentum | reversal | random
-    n_sec: 20
-    n_days: 750
-    seed: 7
+    n_sec: 20                # varlık sayısı
+    n_days: 750              # günlük bar sayısı
+    seed: 7                  # tekrar-üretilebilirlik
 
   # Gerçek veriye geçmek için source: yfinance yap.
   # UYARI: yfinance sabit ticker listesiyle survivorship bias taşır (Doküman 7).
+  # Gerçek point-in-time için tarihsel endeks üyeliği + delisting returns gerekir.
   yfinance:
     tickers: [AAPL, MSFT, GOOGL, AMZN, META, NVDA, TSLA, JPM, JNJ, V,
               PG, HD, MA, XOM, BAC, KO, PFE, CSCO, INTC, WMT]
-    start: "2015-01-01"
-    end: "2020-12-31"
+    # Tarih aralığı campaign.yaml -> start_date/end_date'ten gelir (tek kaynak).
 
-  research_fraction: 0.7     # geri kalanı KİLİTLİ holdout
+  # İleride: kripto (ccxt) — 7/24, funding rate, ölü coin survivorship'i
+  # crypto:
+  #   exchange: binance
+  #   symbols: [BTC/USDT, ETH/USDT, ...]
+  #   timeframe: 1d

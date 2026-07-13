@@ -48,6 +48,7 @@ class ResearchContext(BaseModel):
     )
 
     # Hipotez uzayını kısıtlayan sınırlar
+    allowed_fields: list[str] = Field(default_factory=list)
     allowed_operators: list[str] = Field(default_factory=list)
     allowed_horizons: list[int] = Field(default_factory=list)
     allowed_rebalance: list[str] = Field(default_factory=list)

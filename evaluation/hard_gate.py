@@ -26,7 +26,9 @@ HARD_MAX_TURNOVER = 300.0   # yıllık
 
 def evaluate(result: BacktestResult, hyp: HypothesisSpec,
              min_acceptance_sharpe: float = 0.5,
-             min_positive_folds: float = 0.5) -> Decision:
+             min_positive_folds: float = 0.5,
+             max_drawdown: float = HARD_MAX_DRAWDOWN,
+             max_turnover: float = HARD_MAX_TURNOVER) -> Decision:
     """
     Kabul/red KAMPANYANIN sabit eşiğiyle belirlenir (LLM gameleyemez).
     Hipotezin kendi falsification eşiği yalnızca 'kendi iddiasını tutturdu mu'
@@ -42,12 +44,12 @@ def evaluate(result: BacktestResult, hyp: HypothesisSpec,
         issues.append(Issue(
             type="below_acceptance_sharpe",
             description=f"OOS Sharpe {sharpe:.2f} < kampanya eşiği {min_acceptance_sharpe:.2f}."))
-    if worst_dd > HARD_MAX_DRAWDOWN:
+    if worst_dd > max_drawdown:
         issues.append(Issue(type="excessive_drawdown",
-                            description=f"Max drawdown %{worst_dd*100:.0f} > %{HARD_MAX_DRAWDOWN*100:.0f}."))
-    if max_turn > HARD_MAX_TURNOVER:
+                            description=f"Max drawdown %{worst_dd*100:.0f} > %{max_drawdown*100:.0f}."))
+    if max_turn > max_turnover:
         issues.append(Issue(type="excessive_turnover",
-                            description=f"Turnover {max_turn:.1f} > {HARD_MAX_TURNOVER}."))
+                            description=f"Turnover {max_turn:.1f} > {max_turnover}."))
 
     # --- Walk-forward tutarlılığı (rejimler arası kararlılık) ---
     # Hipotezin kendi taahhüdü varsa onu, yoksa kampanya varsayılanını kullan.

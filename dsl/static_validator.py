@@ -51,12 +51,29 @@ def _find_degenerate_conditionals(nodes: dict[str, GraphNode]) -> list[str]:
     return bad
 
 
-def validate(graph: StrategyGraph, hyp: HypothesisSpec) -> Decision:
-    """StrategyGraph + execution bağlamı -> Decision (accept/revise/reject)."""
+def validate(graph: StrategyGraph, hyp: HypothesisSpec,
+             allowed_fields: "set[str] | list[str] | None" = None) -> Decision:
+    """StrategyGraph + execution bağlamı -> Decision (accept/revise/reject).
+
+    allowed_fields verilirse (Campaign Manager kısıtı), sadece o veri alanlarına
+    izin verilir; dışındaki alanı kullanan strateji reddedilir (Doküman 4.1/6.2).
+    """
     issues: list[Issue] = []
     reject_level = False  # yapısal olarak imkansız (düzeltilemez) hata var mı
 
     nodes = _node_map(graph)
+
+    # --- 0) İzin verilen veri alanı kontrolü (Campaign Manager) ---
+    if allowed_fields:
+        allowed = set(allowed_fields)
+        for node in graph.nodes:
+            if node.op == "field" and node.params.get("field") not in allowed:
+                issues.append(Issue(
+                    type="disallowed_field",
+                    description=f"'{node.params.get('field')}' bu kampanyada izin verilmeyen "
+                                f"veri alanı (izinli: {sorted(allowed)}).",
+                    required_action="Yalnızca kampanyanın izin verdiği alanları kullan."))
+                reject_level = True
 
     # --- 1) Yasak zaman yönü + parametre aralıkları (düğüm bazında) ---
     for node in graph.nodes:

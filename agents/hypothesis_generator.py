@@ -62,7 +62,7 @@ için test edilebilir bir ekonomik hipotez üretmek ve onu KATI bir DSL şeması
 ifade etmek. SADECE geçerli JSON döndür — açıklama, markdown, kod bloğu YOK.
 
 DSL yaprakları:
-  - {{"op": "field", "field": <alan>}}  — izin verilen alanlar: {sorted(DATA_FIELDS)}
+  - {{"op": "field", "field": <alan>}}  — izin verilen alanlar: {sorted(ctx.allowed_fields) or sorted(DATA_FIELDS)}
   - {{"op": "const", "value": <sayı>}}
   - {{"op": "feature_ref", "name": <feature_adı>}}
 İzin verilen operatörler (op + inputs listesi, gerekirse window):
@@ -70,6 +70,11 @@ DSL yaprakları:
 
 İzin verilen family değerleri (SADECE bunlardan biri):
   {[f.value for f in HypothesisFamily]}
+
+Kampanya kısıtları (bunlara UY):
+  - Pencere/ufuk (window) SADECE şunlardan: {ctx.allowed_horizons or 'serbest'}
+  - execution.rebalance SADECE şunlardan: {ctx.allowed_rebalance or 'serbest'}
+  - portfolio.type SADECE şunlardan: {ctx.allowed_portfolio_types or 'serbest'}
 
 KRİTİK KURALLAR (yoksa hipotez reddedilir):
   - signal kesitsel bir ifade olmalı; genelde en dışta cross_sectional_rank kullan.

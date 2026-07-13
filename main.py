@@ -48,13 +48,25 @@ def main() -> None:
     models = load_yaml("models.yaml")["models"]
     data_cfg = load_yaml("data.yaml")["data"]
 
+    budget = campaign.get("budget", {})
+    risk = campaign.get("risk_constraints", {})
+    hpol = campaign.get("holdout_policy", {})
     cfg = CampaignConfig(
         goal=campaign["goal"],
         universe_description=campaign["universe_description"],
+        allowed_fields=campaign.get("allowed_fields", []),
         allowed_operators=campaign.get("allowed_operators", []),
-        max_experiments=campaign["maximum_experiments"],
-        cost_bps=float(campaign.get("cost_bps", 5.0)),
-        min_acceptance_sharpe=float(campaign.get("min_acceptance_sharpe", 0.5)),
+        allowed_horizons=campaign.get("allowed_horizons", []),
+        allowed_rebalance=campaign.get("allowed_rebalance", []),
+        portfolio_types=campaign.get("portfolio_types", []),
+        max_experiments=int(budget.get("maximum_experiments", 8)),
+        max_llm_tokens=int(budget.get("maximum_llm_tokens", 300000)),
+        cost_bps=float(budget.get("cost_bps", 5.0)),
+        min_acceptance_sharpe=float(risk.get("min_acceptance_sharpe", 0.5)),
+        max_drawdown=float(risk.get("max_drawdown", 0.40)),
+        max_turnover=float(risk.get("max_turnover", 300.0)),
+        min_positive_folds=float(risk.get("min_positive_folds", 0.5)),
+        research_fraction=float(hpol.get("research_fraction", 0.7)),
     )
 
     # Model TAK-ÇALIŞTIR: üretici + bağımsız eleştirmen config'ten kurulur
@@ -63,9 +75,14 @@ def main() -> None:
 
     # Veri: adaptörden (sentetik/gerçek config'ten) yüklenir, sonra araştırma /
     # KİLİTLİ holdout olarak bölünür. Kampanya yalnızca araştırma verisini görür.
+    # Tarih aralığı tek kaynak: campaign.yaml (yfinance adaptörüne enjekte edilir).
+    if data_cfg.get("source") == "yfinance":
+        data_cfg.setdefault("yfinance", {})
+        data_cfg["yfinance"]["start"] = str(campaign["start_date"])
+        data_cfg["yfinance"]["end"] = str(campaign["end_date"])
     adapter = make_adapter(data_cfg)
     full = adapter.load()
-    data, holdout_data = split_by_fraction(full, data_cfg.get("research_fraction", 0.7))
+    data, holdout_data = split_by_fraction(full, cfg.research_fraction)
 
     # DEVAM (varsayılan) veya SIFIRLA (--fresh). Devam: novelty/çoklu-test/öğrenme
     # koşular arası birikir; aynı hipotez tekrar üretilmez (Doküman: campaign = çok deney).

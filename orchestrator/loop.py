@@ -59,10 +59,23 @@ def _duplicate_decision(hyp, dup_of: str, kind: str) -> Decision:
 class CampaignConfig:
     goal: str = "Kesitsel günlük alpha ara"
     universe_description: str = "20 ABD hissesi, günlük bar, point-in-time (sentetik)"
+    # İzin verilen strateji uzayı (Campaign Manager kısıtları)
+    allowed_fields: list[str] = field(default_factory=list)
     allowed_operators: list[str] = field(default_factory=list)
+    allowed_horizons: list[int] = field(default_factory=list)
+    allowed_rebalance: list[str] = field(default_factory=list)
+    portfolio_types: list[str] = field(default_factory=list)
+    # Bütçe
     max_experiments: int = 10
+    max_llm_tokens: int = 300000
     cost_bps: float = 5.0
-    min_acceptance_sharpe: float = 0.5   # kampanya kabul eşiği (LLM gameleyemez)
+    # Risk kısıtları (hard gate; LLM gameleyemez)
+    min_acceptance_sharpe: float = 0.5
+    max_drawdown: float = 0.40
+    max_turnover: float = 300.0
+    min_positive_folds: float = 0.5
+    # Deney protokolü
+    research_fraction: float = 0.7
 
 
 def _decide_mode(iteration: int, memory: MemoryStore):
@@ -97,7 +110,11 @@ def _build_context(cfg: CampaignConfig, memory: MemoryStore, remaining: int,
     return ResearchContext(
         campaign_goal=cfg.goal,
         universe_description=cfg.universe_description,
+        allowed_fields=cfg.allowed_fields,
         allowed_operators=cfg.allowed_operators,
+        allowed_horizons=cfg.allowed_horizons,
+        allowed_rebalance=cfg.allowed_rebalance,
+        allowed_portfolio_types=cfg.portfolio_types,
         prior_experiments=priors,
         lessons=lessons,
         generation_mode=mode,
@@ -130,6 +147,13 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
 
     bandit = ThompsonBandit([f.value for f in HypothesisFamily], seed=0)
     for i in range(cfg.max_experiments):
+        # Token bütçesi kontrolü (Campaign Manager) — aşılınca kampanya durur
+        used = (getattr(provider, "total_prompt_tokens", 0)
+                + getattr(provider, "total_completion_tokens", 0))
+        if used >= cfg.max_llm_tokens:
+            print(f"[bütçe] LLM token bütçesi ({cfg.max_llm_tokens}) doldu "
+                  f"({used}); kampanya durduruldu.")
+            break
         remaining = cfg.max_experiments - i
         mode, parent, champ_sharpe = _decide_mode(i, memory)
         # Yeni hipotez modunda bandit aile seçer (bütçe tahsisi); revision'da champion'ın ailesi
@@ -168,8 +192,8 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
             print(f"{tag} -> REDDEDİLDİ (derleme): {e}")
             continue
 
-        # 2) Statik doğrula (SIZINTI kontrolü)
-        static = validate(graph, hyp)
+        # 2) Statik doğrula (SIZINTI + izin verilen alan kontrolü)
+        static = validate(graph, hyp, allowed_fields=cfg.allowed_fields or None)
         if static.decision != DecisionType.accept:
             rec(hyp, static, STAGE_STATIC_REJECTED)
             reason = static.issues[0].type if static.issues else "?"
@@ -208,8 +232,11 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
         novelty.add(hyp, signal)
         sharpe = result.aggregate_sharpe() or 0.0
 
-        # 4) Hard gate (kampanya sabit eşiği + fold tutarlılığı)
-        gate = hard_gate_evaluate(result, hyp, cfg.min_acceptance_sharpe)
+        # 4) Hard gate (kampanya risk kısıtları — config'ten)
+        gate = hard_gate_evaluate(result, hyp, cfg.min_acceptance_sharpe,
+                                  min_positive_folds=cfg.min_positive_folds,
+                                  max_drawdown=cfg.max_drawdown,
+                                  max_turnover=cfg.max_turnover)
         if gate.decision != DecisionType.accept:
             rec(hyp, gate, STAGE_GATE_REJECTED, result=result)
             reason = gate.issues[0].type if gate.issues else "?"

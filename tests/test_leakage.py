@@ -113,6 +113,17 @@ def test_unknown_field_rejected():
         print("  [ok] izinsiz veri alanı derlemede reddedildi")
 
 
+def test_disallowed_field_rejected():
+    # Kampanya sadece 'close'a izin veriyor ama sinyal 'volume' kullanıyor -> red
+    sig = _cs_rank_of(Expression(op="rolling_mean", window=20,
+                                 inputs=[Expression(op="field", field="volume")]))
+    h = _hyp(sig)
+    dec = validate(compile_hypothesis(h), h, allowed_fields={"close"})
+    assert dec.decision == DecisionType.reject
+    assert any(i.type == "disallowed_field" for i in dec.issues)
+    print("  [ok] izin verilmeyen veri alanı (campaign kısıtı) reddedildi")
+
+
 def test_degenerate_conditional_rejected():
     # conditional'ın iki dalı aynı -> sahte koşullama (reward hacking) -> reddedilmeli
     same = Expression(op="field", field="close")
@@ -147,6 +158,7 @@ def main():
     test_lag_is_safe()
     test_unknown_operator_rejected()
     test_unknown_field_rejected()
+    test_disallowed_field_rejected()
     test_degenerate_conditional_rejected()
     test_excessive_complexity_rejected()
     print("OK — tüm sızıntı/geçerlilik testleri geçti.")
