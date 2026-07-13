@@ -13,7 +13,7 @@ import os
 import sqlite3
 from datetime import datetime
 
-from evaluation import build_report
+from evaluation import build_report, evaluate_strategies
 from memory import MemoryStore
 
 # Pipeline aşamaları — funnel sırası (üstten alta)
@@ -185,6 +185,30 @@ def _multiple_testing(memory_db: str) -> str:
             'kesin değildir.</div>')
 
 
+def _pareto(memory_db: str) -> str:
+    """Çok amaçlı Pareto sıralaması (Doküman 11.2)."""
+    store = MemoryStore(memory_db)
+    evals = evaluate_strategies(store.accepted_full())
+    store.close()
+    if not evals:
+        return '<div class="card desc">Değerlendirilecek kabul edilmiş strateji yok.</div>'
+    body = ""
+    for e in evals:
+        star = '<span class="pill good">Pareto-optimal</span>' if e.pareto_optimal else '–'
+        body += (f"<tr><td>{_esc(e.hypothesis_id)}</td>"
+                 f'<td class="num">{e.sharpe:.2f}</td>'
+                 f'<td class="num">{e.sharpe_lb:.2f}</td>'
+                 f'<td class="num">%{e.max_drawdown*100:.0f}</td>'
+                 f'<td class="num">{e.turnover:.0f}</td>'
+                 f'<td class="num">{e.score:.2f}</td><td>{star}</td></tr>')
+    return ('<div class="card"><table><tr><th>Kimlik</th><th>Sharpe</th>'
+            '<th>Sharpe alt-sınır</th><th>Maks DD</th><th>Turnover</th>'
+            '<th>Skor</th><th>Pareto</th></tr>' + body + "</table></div>"
+            '<div class="desc" style="margin-top:8px">Skor = Sharpe_alt-sınır '
+            '− 0.5·DD − 0.002·turnover (bütçe tahsisi için yardımcı sinyal). '
+            'Pareto-optimal = hiçbir stratejiye tüm boyutlarda yenik düşmeyen.</div>')
+
+
 def _holdout(holdout_db: str) -> str:
     if not os.path.exists(holdout_db):
         return '<div class="card desc">Holdout değerlendirmesi yapılmadı.</div>'
@@ -312,6 +336,12 @@ def generate_dashboard(memory_db: str, holdout_db: str, out_path: str,
                  "Deflated Sharpe (DSR) ve FDR bunu düzeltir: FDR 'GEÇTİ' değilse sonuç "
                  "istatistiksel olarak kanıtlanmış sayılmaz.",
                  _multiple_testing(memory_db)),
+        _section("Çok Amaçlı Sıralama (Pareto)",
+                 "Kabul edilen stratejiler tek Sharpe ile değil; Sharpe alt güven "
+                 "sınırı, drawdown ve turnover birlikte değerlendirilir. Pareto-optimal "
+                 "olanlar hiçbir boyutta başkasına tümüyle yenik düşmez — reward "
+                 "hacking'e karşı ek bir süzgeç.",
+                 _pareto(memory_db)),
         _section("Kilitli Dönem Sınavı (Holdout)",
                  "Araştırma sırasında hiç görülmeyen, kilitli bir dönemde yapılan son "
                  "test. Bir stratejinin gerçekten genelleyip genellemediği buradan "

@@ -138,6 +138,13 @@ class MemoryStore:
                FROM experiment WHERE decision='accept'
                ORDER BY sharpe DESC LIMIT ?""", (limit,)).fetchall()
 
+    def accepted_full(self) -> list[tuple]:
+        """Pareto için: (hid, title, sharpe, max_drawdown, turnover, returns_list)."""
+        rows = self.conn.execute(
+            """SELECT hypothesis_id, title, sharpe, max_drawdown, turnover, returns_json
+               FROM experiment WHERE decision='accept' AND returns_json IS NOT NULL""").fetchall()
+        return [(h, t, s, dd, tn, json.loads(rj)) for h, t, s, dd, tn, rj in rows]
+
     def summary_by_decision(self) -> dict[str, int]:
         rows = self.conn.execute(
             "SELECT decision, COUNT(*) FROM experiment GROUP BY decision").fetchall()
