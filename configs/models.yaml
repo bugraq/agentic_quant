@@ -1,0 +1,20 @@
+# Model card'lar (Doküman 17.1) — model TAK-ÇALIŞTIR burada.
+# Bir modeli değiştirmek = burada tek blok. Kod değişmez.
+models:
+  hypothesis_generator:
+    provider: openrouter        # dummy | openrouter | vllm | openai_compatible
+    model: openai/gpt-4o-mini   # ucuz + JSON'da güvenilir. Ücretsiz denemek için:
+                                #   meta-llama/llama-3.3-70b-instruct:free
+                                #   google/gemini-2.0-flash-exp:free
+    api_key_env: OPENROUTER_API_KEY   # key .env'den okunur, koda girmez
+    endpoint: null              # vLLM'e geçince: http://localhost:8000/v1
+    temperature: 0.9            # üretimde yüksek çeşitlilik
+    max_tokens: 4000
+
+  quant_critic:               # BAĞIMSIZ eleştirmen (Doküman 15)
+    provider: openrouter      # dummy | openrouter | vllm
+    model: openai/gpt-4o-mini # ideal: üreticiden FARKLI model (gerçek bağımsızlık);
+                              #   şimdilik farklı prompt+düşük sıcaklık ile ayrışıyor
+    api_key_env: OPENROUTER_API_KEY
+    endpoint: null
+    temperature: 0.2          # değerlendirmede düşük sıcaklık

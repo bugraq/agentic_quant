@@ -1,0 +1,9 @@
+# Çekirdek — contract'lar ve config
+pydantic>=2.0
+pyyaml>=6.0
+
+# Veri ve backtest (ileride)
+# numpy>=1.24
+# pandas>=2.0
+# polars>=0.20
+# duckdb>=0.9

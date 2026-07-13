@@ -1,0 +1,23 @@
+# Kampanya konfigürasyonu (Doküman 4.1) — iskelet sürüm
+campaign:
+  name: skeleton_daily_alpha_v0
+  universe: sp500_point_in_time      # iskelette sentetik veriyle temsil ediliyor
+  universe_description: "20 ABD hissesi, günlük bar, point-in-time (sentetik momentum)"
+  goal: "Kesitsel günlük long-short alpha ara"
+
+  allowed_operators:
+    - return
+    - rolling_mean
+    - cross_sectional_rank
+    - negate
+    - zscore
+    - neutralize_sector
+
+  maximum_experiments: 8
+  cost_bps: 5.0
+  min_acceptance_sharpe: 0.5      # kabul için gereken minimum OOS Sharpe (sabit, LLM gameleyemez)
+
+  # İskelette henüz kullanılmıyor; sonraki fazlarda devreye girecek
+  holdout_policy:
+    access_mode: one_shot
+    maximum_candidates: 20
