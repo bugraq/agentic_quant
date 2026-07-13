@@ -61,6 +61,9 @@ class ResearchContext(BaseModel):
         default_factory=list,
         description="Semantic memory'den çıkarılan dersler — LLM'e geri besleme")
 
+    # Bandit'in bu tur için önerdiği aile (bütçe tahsisi)
+    suggested_family: Optional[str] = None
+
     # Üretim modu
     generation_mode: GenerationMode = GenerationMode.new
     parent_hypothesis: Optional[HypothesisSpec] = None   # revision/combination için

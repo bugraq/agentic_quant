@@ -57,8 +57,9 @@ tek tek `dummy → gerçek` yap. Baştan gerçek yapılacak iki şey:
 - [x] Holdout servisi (LLM'den ayrı, kilitli dönem, one-shot, audit log, aday kotası)
 - [x] Critic ajanı (bağımsız LLM, farklı prompt+düşük sıcaklık, ekonomik mekanizma denetimi)
 - [x] DataAdapter (sentetik <-> gerçek tak-çalıştır); yfinance ile gerçek S&P 500 (survivorship uyarısıyla)
+- [x] Bandit bütçe tahsisi (Thompson sampling) — araştırma bütçesini aileler arasında başarıya göre dağıtır
 - [ ] Kripto adaptörü (ccxt), point-in-time endeks üyeliği, delisting
-- [ ] (opsiyonel) Research dashboard, Pareto sıralama, bandit bütçe tahsisi
+- [ ] (opsiyonel) Research dashboard, Pareto çok-amaçlı sıralama
 
 ### LLM sağlayıcısı (esnek)
 `configs/models.yaml` → `provider: openrouter|vllm|openai_compatible|dummy`. Hepsi

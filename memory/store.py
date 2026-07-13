@@ -131,6 +131,16 @@ class MemoryStore:
                FROM experiment WHERE returns_json IS NOT NULL""").fetchall()
         return [(h, t, d, s, json.loads(rj)) for h, t, d, s, rj in rows]
 
+    def family_outcome_counts(self) -> dict[str, tuple[int, int]]:
+        """Bandit için: family -> (kabul, toplam_backtest). Sadece backtest'lenenler."""
+        rows = self.conn.execute(
+            """SELECT family,
+                      SUM(CASE WHEN decision='accept' THEN 1 ELSE 0 END) AS accepts,
+                      COUNT(*) AS total
+               FROM experiment WHERE sharpe IS NOT NULL
+               GROUP BY family""").fetchall()
+        return {fam: (int(acc or 0), int(tot or 0)) for fam, acc, tot in rows}
+
     def best_by_sharpe(self) -> Optional[tuple]:
         """En yüksek Sharpe'lı deney (kabul edilmese bile) — champion adayı.
         Döndürür: (hypothesis_json, sharpe, decision) veya None."""
