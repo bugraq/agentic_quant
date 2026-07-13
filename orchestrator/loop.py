@@ -88,17 +88,23 @@ def _decide_mode(iteration: int, memory: MemoryStore):
     """
     # Champion = KABUL EDİLMİŞ en iyi hipotez (ham Sharpe peşinde koşma yok, Doküman 16.1).
     champion = memory.best_accepted()   # (json, sharpe) | None
-    # Kabul edilmiş champion çıkana dek keşfe devam (reddedilmişi geliştirmeye çalışma).
-    if iteration < EXPLORE_ROUNDS or champion is None:
-        return GenerationMode.new, None, (champion[1] if champion else None)
-    # Exploit fazı: her 3. turda başarısız bir hipotezi TERS ÇEVİR (inversion),
-    # aksi halde kabul edilmiş champion'ı geliştir (revision).
-    if iteration % 3 == 2:
+    champ_sharpe = champion[1] if champion else None
+    # Keşif turları: sıfırdan yeni yön dene.
+    if iteration < EXPLORE_ROUNDS:
+        return GenerationMode.new, None, champ_sharpe
+    # Exploit fazı. İki durumda başarısız bir hipotezi TERS ÇEVİR (inversion):
+    #   (a) hiç kabul yoksa (champion None) — pes etme, naive sinyalin tersini dene
+    #       (ör. momentum kaybediyorsa kısa-vadeli reversal kazanıyor olabilir);
+    #   (b) champion varsa her 3. turda çeşitlilik için.
+    # Aksi halde kabul edilmiş champion'ı geliştir (revision).
+    if champion is None or iteration % 3 == 2:
         failed = memory.worst_failed_hypothesis()
         if failed:
             return (GenerationMode.inversion,
-                    HypothesisSpec.model_validate_json(failed[0]), champion[1])
-    return GenerationMode.revision, HypothesisSpec.model_validate_json(champion[0]), champion[1]
+                    HypothesisSpec.model_validate_json(failed[0]), champ_sharpe)
+        # Ters çevrilecek belirgin başarısız yoksa keşfe devam.
+        return GenerationMode.new, None, champ_sharpe
+    return GenerationMode.revision, HypothesisSpec.model_validate_json(champion[0]), champ_sharpe
 
 
 def _build_context(cfg: CampaignConfig, memory: MemoryStore, remaining: int,
