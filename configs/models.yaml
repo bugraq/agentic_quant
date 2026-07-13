@@ -2,7 +2,10 @@
 # Bir modeli değiştirmek = burada tek blok. Kod değişmez.
 models:
   hypothesis_generator:
-    provider: openrouter        # dummy | openrouter | vllm | openai_compatible
+    provider: openrouter        # dummy | random | openrouter | vllm | openai_compatible
+    # BASELINE KARŞILAŞTIRMASI (Deney A): provider: random + critic: dummy yap,
+    # AYNI bütçeyle koş; LLM'in random-search'e karşı verimliliği ölçülür.
+    # seed: 0                   # random provider için (reproducibility)
     model: openai/gpt-4o-mini   # ucuz + JSON'da güvenilir. Ücretsiz denemek için:
                                 #   meta-llama/llama-3.3-70b-instruct:free
                                 #   google/gemini-2.0-flash-exp:free

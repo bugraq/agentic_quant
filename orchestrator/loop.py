@@ -56,10 +56,23 @@ def _duplicate_decision(hyp, dup_of: str, kind: str) -> Decision:
                       description=f"{kind} olarak {dup_of} ile aynı — tekrar test edilmedi.")])
 
 
+# LLM'e gösterilen anonim evren tarifi (memorization önlemi, aşağıya bak).
+ANONYMOUS_UNIVERSE = (
+    "Likit, büyük ölçekli hisse senetlerinden oluşan kesitsel bir evren; "
+    "günlük OHLCV barlar. Hangi piyasa, hangi şirketler ve hangi tarih aralığı "
+    "olduğu BİLİNÇLİ olarak verilmiyor — genel geçer, mekanizma temelli "
+    "hipotezler üret (belirli şirket/dönem bilgisine dayanma).")
+
+
 @dataclass
 class CampaignConfig:
     goal: str = "Kesitsel günlük alpha ara"
     universe_description: str = "20 ABD hissesi, günlük bar, point-in-time (sentetik)"
+    # MEMORIZATION ÖNLEMİ (Look-Ahead-Bench / Memorization Problem literatürü):
+    # LLM eğitim verisinden "2015-2023'te NVDA uçtu" gibi geleceği ezbere bilir.
+    # Ticker adları + tarih aralığı prompta girerse backtest dönemine dair
+    # parametre-içi sızıntı olur. Açıkken LLM'e yalnızca anonim tarif gider.
+    anonymize_universe: bool = True
     # İzin verilen strateji uzayı (Campaign Manager kısıtları)
     allowed_fields: list[str] = field(default_factory=list)
     allowed_operators: list[str] = field(default_factory=list)
@@ -117,9 +130,11 @@ def _build_context(cfg: CampaignConfig, memory: MemoryStore, remaining: int,
         for (h, t, f, d, s) in memory.prior_summaries()
     ]
     lessons = build_lessons(memory.family_stats())
+    # LLM'e giden evren tarifi: anonimleştirme açıksa ticker/tarih İÇERMEZ.
+    llm_universe = ANONYMOUS_UNIVERSE if cfg.anonymize_universe else cfg.universe_description
     return ResearchContext(
         campaign_goal=cfg.goal,
-        universe_description=cfg.universe_description,
+        universe_description=llm_universe,
         allowed_fields=cfg.allowed_fields,
         allowed_operators=cfg.allowed_operators,
         allowed_horizons=cfg.allowed_horizons,
@@ -204,8 +219,10 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
             print(f"{tag} -> REDDEDİLDİ (derleme): {e}")
             continue
 
-        # 2) Statik doğrula (SIZINTI + izin verilen alan kontrolü)
-        static = validate(graph, hyp, allowed_fields=cfg.allowed_fields or None)
+        # 2) Statik doğrula (SIZINTI + izin verilen alan/rebalance/portföy kontrolü)
+        static = validate(graph, hyp, allowed_fields=cfg.allowed_fields or None,
+                          allowed_rebalance=cfg.allowed_rebalance or None,
+                          allowed_portfolio_types=cfg.portfolio_types or None)
         if static.decision != DecisionType.accept:
             rec(hyp, static, STAGE_STATIC_REJECTED)
             reason = static.issues[0].type if static.issues else "?"
@@ -274,9 +291,25 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
         # Kabul+robust bir stratejinin pencerelerini arar; optimize versiyon HEM
         # daha iyi HEM robust ise onu al, değilse orijinali koru (asla bozma).
         if cfg.parameter_optimization and cfg.allowed_horizons and n_window_slots(hyp) > 0:
-            opt_hyp, opt_score = optimize_parameters(
+            opt_hyp, opt_score, opt_trials = optimize_parameters(
                 hyp, data, cfg.allowed_horizons, cost_bps=cfg.cost_bps, n_samples=8)
-            if opt_hyp is not hyp and (opt_score or -99) > sharpe + 0.05:
+            # DÜRÜST SAYIM: optimizer'ın yaptığı HER backtest bir denemedir ve
+            # multiple-testing muhasebesine girer (Doküman 10/12). Kaydet.
+            for t_hyp, t_res in opt_trials:
+                t_dec = Decision(
+                    hypothesis_id=t_hyp.hypothesis_id, decision=DecisionType.reject,
+                    source=DecisionSource.statistical, severity=Severity.low,
+                    issues=[Issue(type="parameter_search_trial",
+                                  description="Parametre arama denemesi (seçilmedi; "
+                                              "yalnızca çoklu-test sayımı için).")])
+                memory.record(t_hyp, t_dec, "parameter_search", result=t_res,
+                              parent_hypothesis_id=hyp.hypothesis_id,
+                              relation_type="parameter_variant")
+            if opt_trials:
+                print(f"    (parametre arama: {len(opt_trials)} deneme sayıma eklendi)")
+            # Muhafazakâr karşılaştırma: min-fold vs min-fold (elma-elma).
+            orig_min_fold = min((m.sharpe for m in result.per_fold_metrics), default=0.0)
+            if opt_hyp is not hyp and (opt_score or -99) > orig_min_fold + 0.05:
                 g2 = compile_hypothesis(opt_hyp)
                 sig2 = evaluate_signal(g2, data)
                 res2 = run_walk_forward(g2, opt_hyp, data, n_folds=5,
@@ -287,8 +320,11 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
                                            max_turnover=cfg.max_turnover)
                 rob2 = run_robustness(g2, opt_hyp, data, cost_bps=cfg.cost_bps, signal=sig2)
                 if gate2.decision == DecisionType.accept and rob2.robust:
-                    print(f"{tag} -> parametre optimize edildi: Sharpe "
-                          f"{sharpe:.2f} -> {res2.aggregate_sharpe():.2f}")
+                    # Kriter MUHAFAZAKÂR (min-fold); ortalama Sharpe düşebilir —
+                    # bilinçli takas: tutarlılık > tepe performans (Doküman 11.2).
+                    print(f"{tag} -> parametre optimize edildi (min-fold "
+                          f"{orig_min_fold:.2f} -> {opt_score:.2f}; ort Sharpe "
+                          f"{sharpe:.2f} -> {res2.aggregate_sharpe():.2f})")
                     hyp, result, gate = opt_hyp, res2, gate2
                     sharpe = result.aggregate_sharpe() or 0.0
 

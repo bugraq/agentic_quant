@@ -68,6 +68,7 @@ def main() -> None:
         min_positive_folds=float(risk.get("min_positive_folds", 0.5)),
         research_fraction=float(hpol.get("research_fraction", 0.7)),
         parameter_optimization=bool(budget.get("parameter_optimization", False)),
+        anonymize_universe=bool(campaign.get("anonymize_universe", True)),
     )
 
     # Model TAK-ÇALIŞTIR: üretici + bağımsız eleştirmen config'ten kurulur
@@ -80,9 +81,13 @@ def main() -> None:
     literature: list[str] = []
     if gen_cfg.get("web_search") and hasattr(provider, "client"):
         from agents.literature import fetch_literature_mechanisms
+        from orchestrator.loop import ANONYMOUS_UNIVERSE
         print("Literatür aranıyor (web_search)...")
+        # Anonimleştirme açıkken literatür ajanı da ticker/tarih GÖRMEZ.
+        lit_universe = (ANONYMOUS_UNIVERSE if cfg.anonymize_universe
+                        else campaign["universe_description"])
         literature = fetch_literature_mechanisms(
-            provider.client, provider.model, campaign["universe_description"])
+            provider.client, provider.model, lit_universe)
         for m in literature:
             print(f"  • {m[:100]}")
         print()

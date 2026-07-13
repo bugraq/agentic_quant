@@ -23,8 +23,9 @@ from data.synthetic import (
     gen_short_term_reversal,
 )
 
+# market_cap standart alan DEĞİL: kaynakta shares outstanding yoksa üretilmez.
 _STD_FIELDS = ["open", "high", "low", "close", "adjusted_close",
-               "volume", "dollar_volume", "market_cap"]
+               "volume", "dollar_volume"]
 
 
 class DataAdapter(Protocol):
@@ -53,7 +54,7 @@ class SyntheticAdapter:
 class YFinanceAdapter:
     """
     Yahoo Finance OHLCV (yfinance). SURVIVORSHIP BIAS taşır (yukarıdaki uyarı).
-    Fundamental/market_cap yoktur; market_cap = close (placeholder).
+    Fundamental/market_cap yoktur — market_cap alanı BİLEREK üretilmez.
     """
 
     def __init__(self, tickers: list[str], start: str, end: str) -> None:
@@ -85,7 +86,9 @@ class YFinanceAdapter:
             "adjusted_close": _fld("Adj Close"),
             "volume": volume,
             "dollar_volume": close * volume,
-            "market_cap": close,   # placeholder — shares outstanding yok
+            # market_cap BİLEREK YOK: shares outstanding verisi olmadan
+            # market_cap üretilemez; fiyatı market_cap diye sunmak sahte
+            # "size faktörü" testine yol açar (etiket-sinyal dürüstlüğü).
         }
         # Temizlik: iş günlerine hizala, kısıtlı ffill (delist boşluklarını kapatma)
         fields = {k: v.sort_index().ffill(limit=5) for k, v in fields.items()}

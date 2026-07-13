@@ -16,11 +16,13 @@ from dsl import compile_hypothesis
 from data import gen_cross_sectional_momentum
 from backtest import run_backtest
 
-# Saklanan referans Sharpe değerleri (bu veri + motor için doğrulanmış)
+# Saklanan referans Sharpe değerleri (bu veri + motor için doğrulanmış).
+# v0.3-declared-execution: beyan edilen trade_time (open_t+1) + düzeltilmiş
+# fiyattan getiri + rebalance/holding uygulaması ile yeniden saptandı.
 GOLDEN = {
-    "mom60": 0.5515,
-    "mom20": -0.0853,
-    "rev5": -1.0078,
+    "mom60": 0.5626,
+    "mom20": -0.0807,
+    "rev5": -1.0304,
 }
 TOL = 0.02   # motor determinist; küçük tolerans
 

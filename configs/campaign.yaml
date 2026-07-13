@@ -10,8 +10,17 @@ campaign:
   start_date: 2015-01-01           # araştırma+holdout kapsayan tam aralık (gerçek veri)
   end_date: 2023-12-31
 
+  # MEMORIZATION ÖNLEMİ: LLM, eğitim verisinden bu dönemde bu hisselere ne
+  # olduğunu ezbere bilir (parametre-içi look-ahead). true iken LLM'e ticker
+  # adları ve tarih aralığı GİTMEZ; yalnızca anonim evren tarifi gider.
+  # false yapmak = memorization ablation deneyi (karşılaştırma için).
+  anonymize_universe: true
+
   # --- İzin verilen strateji uzayı (Campaign Manager kısıtları) ---
   allowed_fields:                  # LLM yalnızca bu veri alanlarını kullanabilir
+    # NOT: market_cap YOK — yfinance'ta shares outstanding olmadığından gerçek
+    # market_cap üretilemiyor; sahte (fiyat) veriyle "size faktörü" test etmek
+    # etiket-sinyal dürüstlüğünü bozar. Gerçek veri gelince eklenebilir.
     - open
     - high
     - low
@@ -19,7 +28,6 @@ campaign:
     - adjusted_close
     - volume
     - dollar_volume
-    - market_cap
 
   allowed_operators:
     # temel

@@ -35,14 +35,22 @@ def test_optimizer_improves_bad_window():
     data = gen_cross_sectional_momentum(seed=1)
     bad = _mom(5)                       # kısa pencere: momentum verisinde zayıf
     from optimization.parameter_search import wf_score
-    base = wf_score(bad, data, cost_bps=1.0)
-    best_hyp, best_score = optimize_parameters(
-        bad, data, allowed_horizons=[5, 10, 20, 60, 90, 120], cost_bps=1.0, n_samples=8)
+    base, _ = wf_score(bad, data, cost_bps=1.0)
+    horizons = [5, 10, 20, 60, 90, 120]
+    best_hyp, best_score, trials = optimize_parameters(
+        bad, data, allowed_horizons=horizons, cost_bps=1.0, n_samples=8)
     assert best_score >= base, f"optimizer kötüleştirdi: {base:.2f} -> {best_score:.2f}"
     # yapı korunmalı (hâlâ cross_sectional_rank(return(...)))
     assert best_hyp.signal.op == "cross_sectional_rank"
+    # DÜRÜST SAYIM: her değerlendirilen kombinasyon deneme olarak dönmeli
+    # (1 slot × 6 horizon = tam grid = 6 deneme), hepsinde sonuç + tekil id olmalı.
+    assert len(trials) == len(horizons), f"deneme sayısı eksik: {len(trials)}"
+    ids = [t[0].hypothesis_id for t in trials]
+    assert len(set(ids)) == len(ids) and all(i.startswith("hyp_opt_p") for i in ids)
+    assert all(t[1].net_returns for t in trials), "denemede getiri serisi yok"
     print(f"  [ok] optimizer min-fold Sharpe'ı iyileştirdi/korudu: {base:.2f} -> {best_score:.2f}, "
-          f"seçilen pencere={best_hyp.signal.inputs[0].window}")
+          f"seçilen pencere={best_hyp.signal.inputs[0].window}; "
+          f"{len(trials)} deneme sayıma girdi")
 
 
 def main():

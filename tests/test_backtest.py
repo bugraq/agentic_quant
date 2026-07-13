@@ -104,12 +104,57 @@ def test_higher_cost_lowers_return():
     print(f"  [ok] maliyet artışı getiriyi düşürdü: {r_lo:.4f} -> {r_hi:.4f}")
 
 
+def test_rebalance_lowers_turnover():
+    # Şema = çalıştırılan şey: weekly rebalance / uzun holding period turnover'ı
+    # gerçekten DÜŞÜRMELİ (daha önce bu alanlar motor tarafından yok sayılıyordu).
+    data = gen_cross_sectional_momentum(seed=4)
+    h_daily = _hyp(_momentum_signal())
+    h_weekly = h_daily.model_copy(update={"execution": Execution(
+        signal_time="close_t", trade_time="open_t_plus_1",
+        holding_period_days=5, rebalance="weekly")})
+    g = compile_hypothesis(h_daily)
+    t_daily = run_backtest(g, h_daily, data).per_fold_metrics[0].turnover
+    t_weekly = run_backtest(g, h_weekly, data).per_fold_metrics[0].turnover
+    assert t_weekly < t_daily * 0.5, \
+        f"weekly rebalance turnover'ı düşürmedi ({t_daily:.1f} -> {t_weekly:.1f})"
+    print(f"  [ok] weekly rebalance turnover'ı düşürdü: {t_daily:.1f} -> {t_weekly:.1f}")
+
+
+def test_long_only_weights_nonnegative():
+    # long_only tipinde kısa pozisyon OLMAMALI ve gross ~1 olmalı.
+    from backtest.engine import _build_weights
+    data = gen_cross_sectional_momentum(seed=5)
+    g = compile_hypothesis(_hyp(_momentum_signal()))
+    sig = evaluate_signal(g, data)
+    port = Portfolio(type="long_only", long_quantile=0.3)
+    w = _build_weights(sig, port).dropna(how="all")
+    assert (w.fillna(0) >= 0).all().all(), "long_only'de negatif ağırlık var!"
+    gross = w.abs().sum(axis=1).iloc[100:]
+    assert np.allclose(gross, 1.0, atol=1e-6), "long_only gross 1 değil"
+    print("  [ok] long_only: ağırlıklar >= 0, gross = 1")
+
+
+def test_unsupported_portfolio_rejected():
+    # Motorun uygulayamadığı beyan (ör. beta_neutral) static validator'da RED.
+    from dsl import validate
+    h = _hyp(_momentum_signal())
+    h_bad = h.model_copy(update={"portfolio": Portfolio(type="beta_neutral")})
+    g = compile_hypothesis(h_bad)
+    dec = validate(g, h_bad)
+    assert dec.decision.value == "reject", "desteklenmeyen portföy tipi kabul edildi!"
+    assert any(i.type == "unsupported_portfolio_type" for i in dec.issues)
+    print("  [ok] desteklenmeyen portföy tipi (beta_neutral) reddedildi")
+
+
 def main():
     test_finds_momentum()
     test_finds_reversal()
     test_no_fake_alpha_on_random()
     test_future_prices_do_not_change_past_signal()
     test_higher_cost_lowers_return()
+    test_rebalance_lowers_turnover()
+    test_long_only_weights_nonnegative()
+    test_unsupported_portfolio_rejected()
     print("OK — backtest motoru bilinen sinyalleri buluyor, sızıntı üretmiyor.")
 
 

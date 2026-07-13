@@ -64,8 +64,19 @@ tek tek `dummy → gerçek` yap. Baştan gerçek yapılacak iki şey:
 - [x] Pareto çok-amaçlı sıralama (Sharpe alt-sınır + drawdown + turnover) + muhafazakâr skor
 - [x] Tam kampanya config'i (izin verilen alan/ufuk/operatör, bütçe, risk kısıtları) — hepsi koda bağlı
 - [x] Kampanya kalıcılığı (varsayılan devam / `--fresh` sıfırla)
+- [x] Motor-şema hizalaması — beyan edilen `trade_time`/`rebalance`/`holding_period`/
+  `portfolio.type`/`weighting`/`gross_exposure` motor tarafından GERÇEKTEN uygulanır;
+  uygulanamayan beyan static validator'da reddedilir (şema = çalıştırılan şey)
+- [x] Getiriler düzeltilmiş fiyattan (temettü+split; adjusted_close, open'a faktör)
+- [x] Optimizer denemeleri multiple-testing sayımında (her backtest = 1 deneme;
+  `parameter_search` stage'i ile hafızaya yazılır) + min-fold muhafazakâr skor
+- [x] market_cap placeholder'ı kaldırıldı (sahte size faktörünü önler)
+- [x] LLM memorization önlemi — `anonymize_universe: true` iken prompta ticker/tarih
+  gitmez (parametre-içi look-ahead kontrolü); `false` = ablation deneyi
+- [x] Random-search baseline (Deney A) — `models.yaml -> provider: random`; aynı
+  pipeline, aynı bütçe, ekonomik gerekçe yok; LLM'in katkısı ölçülebilir
 - [ ] Kripto adaptörü (ccxt), point-in-time endeks üyeliği, delisting
-- [ ] (opsiyonel) Pareto çok-amaçlı sıralama, lineage grafiği
+- [ ] (opsiyonel) lineage grafiği görselleştirmesi
 
 `main.py` çalışınca `dashboard.html` üretilir (offline, tarayıcıda aç). Ayrıca:
 `python -m dashboard.report`

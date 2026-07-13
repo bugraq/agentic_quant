@@ -24,7 +24,7 @@ def fetch_literature_mechanisms(client: OpenAICompatibleClient, model: str,
     user = (f"Evren: {universe_description}\n\n"
             f"Web'de ara ve kesitsel hisse getirisini öngördüğü akademik olarak "
             f"belgelenmiş, YALNIZCA fiyat ve hacim (close, open, high, low, volume, "
-            f"dollar_volume, market_cap) ile hesaplanabilen {n} anomali bul.\n"
+            f"dollar_volume) ile hesaplanabilen {n} anomali bul.\n"
             f"ÖRNEK uygun anomaliler: momentum, kısa vadeli reversal, düşük "
             f"volatilite, hacim/likidite, 52-hafta yüksek, fiyat-hacim etkileşimi.\n"
             f"YASAK (temel veri gerektirir, LİSTELEME): Value, Book-to-Market, "

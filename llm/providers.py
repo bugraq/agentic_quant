@@ -103,6 +103,7 @@ def make_provider(config: dict) -> HypothesisProvider:
     """configs/models.yaml'daki 'provider' alanına göre sağlayıcı kur.
 
     dummy    -> sabit katalog (LLM yok)
+    random   -> random-search baseline (LLM yok, ekonomik gerekçe yok; Deney A)
     openrouter / vllm / openai_compatible -> tek OpenAI-uyumlu istemci;
         aralarındaki tek fark base_url + api_key ortam değişkeni. vLLM'e geçiş
         = models.yaml'da provider'ı değiştir + endpoint ver. Kod değişmez.
@@ -111,6 +112,12 @@ def make_provider(config: dict) -> HypothesisProvider:
     provider = config.get("provider", "dummy")
     if provider == "dummy":
         return DummyProvider()
+
+    if provider == "random":
+        # Random-search baseline (Deney A): LLM'siz, ekonomik gerekçesiz,
+        # aynı pipeline'dan geçen rastgele hipotez üreteci. Karşılaştırma için.
+        from baselines import RandomHypothesisProvider
+        return RandomHypothesisProvider(seed=int(config.get("seed", 0)))
 
     if provider in _OPENAI_COMPATIBLE_DEFAULTS:
         # Gecikmeli import: döngüsel bağımlılığı önler

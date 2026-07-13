@@ -14,6 +14,13 @@ from pydantic import BaseModel, Field
 from contracts.dsl import Expression, NamedFeature
 
 
+# Motorun GERÇEKTEN uyguladığı değer kümeleri — şema bunların dışına çıkarsa
+# static validator reddeder (beyan edilen != çalıştırılan olmasın, Doküman 7).
+SUPPORTED_PORTFOLIO_TYPES = {"cross_sectional_long_short", "long_only"}
+SUPPORTED_WEIGHTINGS = {"equal", "rank_weight"}
+REBALANCE_DAYS = {"daily": 1, "weekly": 5, "monthly": 21}
+
+
 class HypothesisFamily(str, Enum):
     """Multiple-testing gruplaması için hipotez ailesi (Doküman 10.1)."""
 

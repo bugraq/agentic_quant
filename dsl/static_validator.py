@@ -19,7 +19,12 @@ from contracts.decision import (
     Issue,
     Severity,
 )
-from contracts.hypothesis_spec import HypothesisSpec
+from contracts.hypothesis_spec import (
+    REBALANCE_DAYS,
+    SUPPORTED_PORTFOLIO_TYPES,
+    SUPPORTED_WEIGHTINGS,
+    HypothesisSpec,
+)
 from contracts.strategy_graph import GraphNode, StrategyGraph
 from dsl.operators import FORWARD, get_operator, parse_time_token, tick_to_label
 
@@ -52,16 +57,56 @@ def _find_degenerate_conditionals(nodes: dict[str, GraphNode]) -> list[str]:
 
 
 def validate(graph: StrategyGraph, hyp: HypothesisSpec,
-             allowed_fields: "set[str] | list[str] | None" = None) -> Decision:
+             allowed_fields: "set[str] | list[str] | None" = None,
+             allowed_rebalance: "list[str] | None" = None,
+             allowed_portfolio_types: "list[str] | None" = None) -> Decision:
     """StrategyGraph + execution bağlamı -> Decision (accept/revise/reject).
 
-    allowed_fields verilirse (Campaign Manager kısıtı), sadece o veri alanlarına
-    izin verilir; dışındaki alanı kullanan strateji reddedilir (Doküman 4.1/6.2).
+    allowed_* verilirse (Campaign Manager kısıtı), sadece o değerlere izin
+    verilir; dışını kullanan strateji reddedilir (Doküman 4.1/6.2).
     """
     issues: list[Issue] = []
     reject_level = False  # yapısal olarak imkansız (düzeltilemez) hata var mı
 
     nodes = _node_map(graph)
+
+    # --- 0a) Şema = çalıştırılan şey: motorun UYGULAYABİLDİĞİ portföy/rebalance
+    # değerleri dışındaki beyanlar reddedilir (dekoratif şema alanı olamaz).
+    if hyp.portfolio.type not in SUPPORTED_PORTFOLIO_TYPES:
+        issues.append(Issue(
+            type="unsupported_portfolio_type",
+            description=f"portfolio.type '{hyp.portfolio.type}' motor tarafından "
+                        f"uygulanamıyor (desteklenen: {sorted(SUPPORTED_PORTFOLIO_TYPES)}).",
+            required_action="Desteklenen bir portföy tipi seç."))
+        reject_level = True
+    if hyp.portfolio.weighting not in SUPPORTED_WEIGHTINGS:
+        issues.append(Issue(
+            type="unsupported_weighting",
+            description=f"portfolio.weighting '{hyp.portfolio.weighting}' uygulanamıyor "
+                        f"(desteklenen: {sorted(SUPPORTED_WEIGHTINGS)}).",
+            required_action="equal veya rank_weight kullan."))
+        reject_level = True
+    if hyp.execution.rebalance not in REBALANCE_DAYS:
+        issues.append(Issue(
+            type="unsupported_rebalance",
+            description=f"execution.rebalance '{hyp.execution.rebalance}' uygulanamıyor "
+                        f"(desteklenen: {sorted(REBALANCE_DAYS)}).",
+            required_action="daily/weekly/monthly kullan."))
+        reject_level = True
+
+    # --- 0b) Kampanya izin listeleri (varsa) ---
+    if allowed_rebalance and hyp.execution.rebalance not in allowed_rebalance:
+        issues.append(Issue(
+            type="disallowed_rebalance",
+            description=f"'{hyp.execution.rebalance}' bu kampanyada izinli değil "
+                        f"(izinli: {sorted(allowed_rebalance)})."))
+        reject_level = True
+    if allowed_portfolio_types and hyp.portfolio.type not in allowed_portfolio_types:
+        issues.append(Issue(
+            type="disallowed_portfolio_type",
+            description=f"'{hyp.portfolio.type}' bu kampanyada izinli değil "
+                        f"(izinli: {sorted(allowed_portfolio_types)})."))
+        reject_level = True
 
     # --- 0) İzin verilen veri alanı kontrolü (Campaign Manager) ---
     if allowed_fields:
