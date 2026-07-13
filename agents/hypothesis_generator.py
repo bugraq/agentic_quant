@@ -210,6 +210,8 @@ class LLMHypothesisProvider:
         }
 
     def next(self, context: ResearchContext) -> HypothesisSpec:
+        from dsl import CompileError, compile_hypothesis
+
         self._counter += 1
         hid = f"hyp_{self._counter:04d}"
         system = _build_system_prompt(context)
@@ -221,16 +223,27 @@ class LLMHypothesisProvider:
         self._set_meta(system, user, resp)
 
         try:
-            return self._parse(resp.text, hid)
-        except (LLMGenerationError, ValueError, json.JSONDecodeError) as e:
-            # Bir kez düzeltme iste (Doküman 17.2)
+            hyp = self._parse(resp.text, hid)
+            compile_hypothesis(hyp)   # şema geçerli ama DERLENEMEZ olabilir (arite vb.)
+            return hyp
+        except (LLMGenerationError, ValueError, json.JSONDecodeError, CompileError) as e:
+            # Bir kez düzeltme iste (Doküman 17.2) — şema VEYA derleme hatası.
+            # (Gerçek koşuda görüldü: arite hatası onarımsız çöpe gidiyordu.)
             repair_user = (f"{user}\n\nÖnceki çıktın geçersizdi. Hata: {e}\n"
-                           f"Şemaya birebir uyan, SADECE geçerli JSON döndür.")
+                           f"Şemaya ve operatör aritelerine birebir uyan, "
+                           f"SADECE geçerli JSON döndür.")
             resp2 = self.client.chat(self.model, system, repair_user,
                                      temperature=0.2, max_tokens=self.max_tokens)
             self._track(resp2)
             self._set_meta(system, repair_user, resp2)
-            return self._parse(resp2.text, hid)
+            hyp = self._parse(resp2.text, hid)
+            try:
+                compile_hypothesis(hyp)
+            except CompileError:
+                # Onarım da derlenemedi: yine de döndür — loop derleme aşamasında
+                # yakalayıp compile_error olarak KAYDEDER (her deney kaydedilir).
+                pass
+            return hyp
 
     def _parse(self, text: str, hid: str) -> HypothesisSpec:
         data = _extract_json(text)

@@ -198,13 +198,29 @@ class MemoryStore:
                WHERE decision='accept' AND sharpe IS NOT NULL
                ORDER BY sharpe DESC LIMIT 1""").fetchone()
 
-    def worst_failed_hypothesis(self) -> Optional[tuple]:
+    def inverted_parent_ids(self) -> set:
+        """Daha önce inversion denenen parent'lar (sonuç ne olursa olsun).
+
+        Aynı hipotezi tekrar tekrar ters çevirmek bütçe kara deliğidir: tersi
+        zaten denendi (başarısız/duplicate olsa bile). Lineage'dan okunur.
+        """
+        return {r[0] for r in self.conn.execute(
+            """SELECT DISTINCT parent_hypothesis_id FROM experiment
+               WHERE relation_type='inversion'
+                 AND parent_hypothesis_id IS NOT NULL""")}
+
+    def worst_failed_hypothesis(self, exclude: "set | None" = None) -> Optional[tuple]:
         """En negatif Sharpe'lı reddedilen deney — inversion (ters çevirme) adayı.
-        Ters çevrilirse kazanabilir. Döndürür: (hypothesis_json, sharpe) veya None."""
-        return self.conn.execute(
-            """SELECT hypothesis_json, sharpe FROM experiment
+        exclude'dakiler (zaten ters çevrilenler) atlanır.
+        Döndürür: (hypothesis_json, sharpe) veya None."""
+        rows = self.conn.execute(
+            """SELECT hypothesis_id, hypothesis_json, sharpe FROM experiment
                WHERE decision='reject' AND sharpe IS NOT NULL AND sharpe < -0.3
-               ORDER BY sharpe ASC LIMIT 1""").fetchone()
+               ORDER BY sharpe ASC""").fetchall()
+        for hid, hjson, sharpe in rows:
+            if not exclude or hid not in exclude:
+                return (hjson, sharpe)
+        return None
 
     def close(self) -> None:
         self.conn.close()

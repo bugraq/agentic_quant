@@ -110,12 +110,15 @@ def _decide_mode(iteration: int, memory: MemoryStore):
     #       (ör. momentum kaybediyorsa kısa-vadeli reversal kazanıyor olabilir);
     #   (b) champion varsa her 3. turda çeşitlilik için.
     # Aksi halde kabul edilmiş champion'ı geliştir (revision).
+    # NOT: aynı parent BİR KEZ ters çevrilir (lineage'dan bakılır) — aksi halde
+    # sistem aynı başarısızı döngüde tekrar tekrar çevirip bütçeyi duplicate'e
+    # yakar (gerçek koşuda görüldü: 8 deneyin 5'i aynı inversion'dı).
     if champion is None or iteration % 3 == 2:
-        failed = memory.worst_failed_hypothesis()
+        failed = memory.worst_failed_hypothesis(exclude=memory.inverted_parent_ids())
         if failed:
             return (GenerationMode.inversion,
                     HypothesisSpec.model_validate_json(failed[0]), champ_sharpe)
-        # Ters çevrilecek belirgin başarısız yoksa keşfe devam.
+        # Ters çevrilecek YENİ aday yoksa keşfe dön (tekrar üretme).
         return GenerationMode.new, None, champ_sharpe
     return GenerationMode.revision, HypothesisSpec.model_validate_json(champion[0]), champ_sharpe
 
