@@ -238,7 +238,24 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
         novelty.add(hyp, signal)
         sharpe = result.aggregate_sharpe() or 0.0
 
-        # 4) Hard gate (kampanya risk kısıtları — config'ten)
+        # 3d) SAYISAL PARAMETRE OPTİMİZASYONU — GATE'TEN ÖNCE (Doküman 27).
+        # LLM yapıyı verdi; optimizer en iyi pencereleri arar. Böylece eşiğin
+        # hemen altındaki (near-miss) stratejiler de doğru parametreyle kurtulur.
+        if cfg.parameter_optimization and cfg.allowed_horizons and n_window_slots(hyp) > 0:
+            opt_hyp, opt_score = optimize_parameters(
+                hyp, data, cfg.allowed_horizons, cost_bps=cfg.cost_bps, n_samples=8)
+            if opt_hyp is not hyp and (opt_score or -99) > sharpe + 0.02:
+                g2 = compile_hypothesis(opt_hyp)
+                sig2 = evaluate_signal(g2, data)
+                res2 = run_walk_forward(g2, opt_hyp, data, n_folds=5,
+                                        cost_bps=cfg.cost_bps, signal=sig2)
+                if (res2.aggregate_sharpe() or -99) > sharpe:
+                    print(f"{tag} -> parametre optimize edildi: Sharpe "
+                          f"{sharpe:.2f} -> {res2.aggregate_sharpe():.2f}")
+                    hyp, graph, signal, result = opt_hyp, g2, sig2, res2
+                    sharpe = result.aggregate_sharpe() or 0.0
+
+        # 4) Hard gate (optimize edilmiş sonuç üzerinde; kampanya risk kısıtları)
         gate = hard_gate_evaluate(result, hyp, cfg.min_acceptance_sharpe,
                                   min_positive_folds=cfg.min_positive_folds,
                                   max_drawdown=cfg.max_drawdown,
@@ -248,26 +265,6 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
             reason = gate.issues[0].type if gate.issues else "?"
             print(f"{tag} -> RED (gate, Sharpe {sharpe:.2f}): {reason}")
             continue
-
-        # 4b) SAYISAL PARAMETRE OPTİMİZASYONU (Doküman 27: LLM yapısal, motor sayısal)
-        # Yapıyı sabit tut, pencereleri kampanya ufuklarında ara; iyileşirse kabul et.
-        if cfg.parameter_optimization and cfg.allowed_horizons and n_window_slots(hyp) > 0:
-            opt_hyp, opt_score = optimize_parameters(
-                hyp, data, cfg.allowed_horizons, cost_bps=cfg.cost_bps, n_samples=8)
-            if opt_hyp is not hyp and (opt_score or -99) > sharpe + 0.02:
-                g2 = compile_hypothesis(opt_hyp)
-                sig2 = evaluate_signal(g2, data)
-                res2 = run_walk_forward(g2, opt_hyp, data, n_folds=5,
-                                        cost_bps=cfg.cost_bps, signal=sig2)
-                gate2 = hard_gate_evaluate(res2, opt_hyp, cfg.min_acceptance_sharpe,
-                                           min_positive_folds=cfg.min_positive_folds,
-                                           max_drawdown=cfg.max_drawdown,
-                                           max_turnover=cfg.max_turnover)
-                if gate2.decision == DecisionType.accept:
-                    print(f"{tag} -> parametre optimize edildi: Sharpe "
-                          f"{sharpe:.2f} -> {res2.aggregate_sharpe():.2f}")
-                    hyp, graph, signal, result, gate = opt_hyp, g2, sig2, res2, gate2
-                    sharpe = result.aggregate_sharpe() or 0.0
 
         # 5) Sağlamlık testleri (permutation, maliyet 2x, parametre perturbasyonu)
         rob = run_robustness(graph, hyp, data, cost_bps=cfg.cost_bps, signal=signal)

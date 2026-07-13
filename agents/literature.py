@@ -14,8 +14,8 @@ from __future__ import annotations
 from llm.openai_client import OpenAICompatibleClient
 
 _SYSTEM = ("Sen bir kantitatif finans literatürü araştırmacısısın. Web'de arama "
-           "yaparak akademik olarak BELGELENMİŞ, kesitsel (cross-sectional) hisse "
-           "senedi getirisi faktörlerini/anomalilerini bulursun.")
+           "yaparak akademik olarak BELGELENMİŞ, YALNIZCA fiyat ve hacim verisinden "
+           "hesaplanabilen kesitsel hisse senedi anomalilerini bulursun.")
 
 
 def fetch_literature_mechanisms(client: OpenAICompatibleClient, model: str,
@@ -23,11 +23,14 @@ def fetch_literature_mechanisms(client: OpenAICompatibleClient, model: str,
     """Web araması ile n adet gerçek faktör/mekanizma (tek satırlık) döndürür."""
     user = (f"Evren: {universe_description}\n\n"
             f"Web'de ara ve kesitsel hisse getirisini öngördüğü akademik olarak "
-            f"belgelenmiş {n} faktör/anomali bul. Yalnızca fiyat ve hacim verisiyle "
-            f"(close, open, high, low, volume, dollar_volume, market_cap) "
-            f"hesaplanabilecek olanlara öncelik ver.\n"
-            f"Her biri için TEK satır yaz: 'Faktör adı — kısa mekanizma "
-            f"(kullanılabilir alanlar: ...)'. Sadece liste, başka açıklama yok.")
+            f"belgelenmiş, YALNIZCA fiyat ve hacim (close, open, high, low, volume, "
+            f"dollar_volume, market_cap) ile hesaplanabilen {n} anomali bul.\n"
+            f"ÖRNEK uygun anomaliler: momentum, kısa vadeli reversal, düşük "
+            f"volatilite, hacim/likidite, 52-hafta yüksek, fiyat-hacim etkileşimi.\n"
+            f"YASAK (temel veri gerektirir, LİSTELEME): Value, Book-to-Market, "
+            f"Profitability, Investment, kazanç/bilanço temelli faktörler.\n"
+            f"Her biri için TEK satır: 'Anomali adı — kısa mekanizma "
+            f"(alanlar: ...)'. Sadece liste, başka açıklama yok.")
     try:
         resp = client.chat(model, _SYSTEM, user, temperature=0.3,
                            force_json=False, max_tokens=800, web_search=True)

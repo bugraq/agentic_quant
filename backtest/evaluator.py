@@ -108,7 +108,15 @@ def _eval_node(node: GraphNode, vals: dict[str, Value], data: MarketData) -> Val
         return (ins[0] == 0).astype(float)
     if op == "conditional":
         cond, a, b = ins
-        return a.where(cond != 0, b)
+        # a veya b skaler olabilir; sağlam koşullu seçim (a if cond else b)
+        if isinstance(cond, pd.DataFrame):
+            mask = cond != 0
+            if isinstance(a, pd.DataFrame):
+                return a.where(mask, b)
+            if isinstance(b, pd.DataFrame):
+                return b.where(~mask, a)
+            return mask.astype(float) * a + (~mask).astype(float) * b
+        return a if cond != 0 else b
 
     raise NotImplementedError(f"Evaluator'da uygulanmamış operatör: {op}")
 
