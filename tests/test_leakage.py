@@ -113,6 +113,20 @@ def test_unknown_field_rejected():
         print("  [ok] izinsiz veri alanı derlemede reddedildi")
 
 
+def test_degenerate_conditional_rejected():
+    # conditional'ın iki dalı aynı -> sahte koşullama (reward hacking) -> reddedilmeli
+    same = Expression(op="field", field="close")
+    cond = Expression(op="greater_than", inputs=[
+        Expression(op="volatility", window=20, inputs=[Expression(op="field", field="close")]),
+        Expression(op="const", value=0.02)])
+    sig = _cs_rank_of(Expression(op="conditional", inputs=[cond, same, same]))
+    h = _hyp(sig)
+    dec = validate(compile_hypothesis(h), h)
+    assert dec.decision == DecisionType.reject
+    assert any(i.type == "degenerate_conditional" for i in dec.issues)
+    print("  [ok] dejenere conditional (iki dalı aynı) reddedildi")
+
+
 def test_excessive_complexity_rejected():
     # 45 iç içe negate -> karmaşıklık sınırı aşımı
     e: Expression = Expression(op="field", field="close")
@@ -133,6 +147,7 @@ def main():
     test_lag_is_safe()
     test_unknown_operator_rejected()
     test_unknown_field_rejected()
+    test_degenerate_conditional_rejected()
     test_excessive_complexity_rejected()
     print("OK — tüm sızıntı/geçerlilik testleri geçti.")
 

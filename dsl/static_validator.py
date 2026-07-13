@@ -33,6 +33,24 @@ def _node_map(graph: StrategyGraph) -> dict[str, GraphNode]:
     return {n.node_id: n for n in graph.nodes}
 
 
+def _subtree_sig(nid: str, nodes: dict[str, GraphNode]):
+    """Bir alt ağacın yapısal imzası (dejenere koşul tespiti için)."""
+    n = nodes[nid]
+    params = tuple(sorted((k, v) for k, v in n.params.items() if k != "_info_tick"))
+    return (n.op, params, tuple(_subtree_sig(c, nodes) for c in n.input_ids))
+
+
+def _find_degenerate_conditionals(nodes: dict[str, GraphNode]) -> list[str]:
+    """İki değer-dalı yapısal olarak AYNI olan conditional'lar = sahte koşullama."""
+    bad = []
+    for n in nodes.values():
+        if n.op == "conditional" and len(n.input_ids) == 3:
+            _, a, b = n.input_ids
+            if _subtree_sig(a, nodes) == _subtree_sig(b, nodes):
+                bad.append(n.node_id)
+    return bad
+
+
 def validate(graph: StrategyGraph, hyp: HypothesisSpec) -> Decision:
     """StrategyGraph + execution bağlamı -> Decision (accept/revise/reject)."""
     issues: list[Issue] = []
@@ -93,6 +111,15 @@ def validate(graph: StrategyGraph, hyp: HypothesisSpec) -> Decision:
                     f"işlem {hyp.execution.trade_time} ({tick_to_label(trade_tick)}) "
                     f"anında; bilgi işlemden önce bilinmiyor."),
                 required_action="İşlemi en az bir bar sonraya kaydır (örn. open_t_plus_1)."))
+
+    # --- 2b) Dejenere koşul: iki dalı aynı conditional = sahte koşullama ---
+    for nid in _find_degenerate_conditionals(nodes):
+        issues.append(Issue(
+            type="degenerate_conditional",
+            description=("conditional'ın iki değer-dalı aynı — koşul boşa çalışıyor "
+                         "(sahte rejim/koşullama yapısı)."),
+            required_action="İki dalı anlamlı biçimde farklılaştır ya da conditional'ı kaldır."))
+        reject_level = True
 
     # --- 3) Karmaşıklık üst sınırı ---
     c = graph.complexity

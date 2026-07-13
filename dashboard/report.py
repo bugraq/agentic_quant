@@ -8,6 +8,7 @@ başında Türkçe başlık + kısa açıklama vardır; üstte anlatısal bir ö
 from __future__ import annotations
 
 import html
+import json
 import os
 import sqlite3
 from datetime import datetime
@@ -70,6 +71,16 @@ td.num { text-align:right; font-variant-numeric:tabular-nums; }
 .pill.good { background:rgba(63,185,80,.16); color:var(--good); }
 .pill.bad { background:rgba(248,81,73,.16); color:var(--bad); }
 .pill.muted { background:var(--border); color:var(--muted); }
+.detail { background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:14px 16px; margin-bottom:12px; }
+.detail .dh { font-weight:600; margin-bottom:8px; font-size:14px; }
+.detail .did { color:var(--accent); font-family:ui-monospace,monospace; margin-right:6px; }
+.detail .dsh { float:right; color:var(--good); font-weight:700; font-size:13px; }
+.detail .drow { font-size:13px; margin:5px 0; }
+.detail .drow b { color:var(--muted); font-weight:600; }
+.detail code { background:var(--bg); border:1px solid var(--border); border-radius:5px;
+  padding:3px 7px; font-size:12.5px; display:inline-block; margin-top:3px;
+  font-family:ui-monospace,monospace; word-break:break-all; }
 .foot { color:var(--muted); font-size:12px; margin-top:44px;
   border-top:1px solid var(--border); padding-top:16px; }
 """
@@ -194,6 +205,46 @@ def _holdout(holdout_db: str) -> str:
             '<th>Sonuç</th></tr>' + body + "</table></div>")
 
 
+def _signal_formula(e: dict) -> str:
+    """DSL sinyal ağacını okunabilir formüle çevir (görsel için)."""
+    op = e["op"]
+    if op == "field":
+        return e.get("field") or "?"
+    if op == "const":
+        return str(e.get("value"))
+    if op == "feature_ref":
+        return e.get("name") or "?"
+    inner = ", ".join(_signal_formula(i) for i in e.get("inputs", []) if isinstance(i, dict))
+    w = f", pencere={e['window']}" if e.get("window") else ""
+    return f"{op}({inner}{w})"
+
+
+def _details(conn) -> str:
+    """Hipotez detayı (Doküman 20) — kabul edilen stratejilerin TAM içeriği."""
+    rows = _q(conn, """SELECT hypothesis_id, sharpe, hypothesis_json FROM experiment
+                       WHERE decision='accept' AND hypothesis_json IS NOT NULL
+                       ORDER BY sharpe DESC LIMIT 6""")
+    if not rows:
+        return '<div class="card desc">Detay gösterilecek kabul edilmiş strateji yok.</div>'
+    cards = []
+    for hid, sharpe, hj in rows:
+        h = json.loads(hj)
+        mech = h.get("economic_mechanism", {})
+        fails = mech.get("expected_failure_conditions", []) or []
+        f = h.get("falsification", {})
+        cards.append(f"""<div class="detail">
+  <div class="dh"><span class="did">{_esc(hid)}</span> {_esc(h.get('title',''))}
+    <span class="dsh">Sharpe {sharpe:.2f}</span></div>
+  <div class="drow"><b>İddia:</b> {_esc(h.get('claim',''))}</div>
+  <div class="drow"><b>Ekonomik mekanizma:</b> {_esc(mech.get('type',''))} — {_esc(mech.get('description',''))}</div>
+  <div class="drow"><b>Beklenen başarısızlık koşulları:</b> {_esc(', '.join(fails) or '—')}</div>
+  <div class="drow"><b>Aile / portföy:</b> {_esc(h.get('family',''))} · {_esc(h.get('portfolio',{}).get('type',''))}</div>
+  <div class="drow"><b>Sinyal (DSL formülü):</b><br><code>{_esc(_signal_formula(h.get('signal',{})))}</code></div>
+  <div class="drow"><b>Çürütme eşiği (ön kayıt):</b> min OOS Sharpe {f.get('minimum_oos_sharpe','—')}, maks turnover {f.get('maximum_turnover','—')}, maks DD {f.get('maximum_drawdown','—')}</div>
+</div>""")
+    return "".join(cards)
+
+
 def _families(conn) -> str:
     rows = _q(conn, """SELECT family,
                          SUM(CASE WHEN decision='accept' THEN 1 ELSE 0 END),
@@ -233,6 +284,12 @@ def generate_dashboard(memory_db: str, holdout_db: str, out_path: str,
                  "Tüm süzgeçlerden geçip kabul edilen stratejiler, araştırma dönemi "
                  "Sharpe oranına göre sıralı.",
                  _leaderboard(conn)),
+        _section("Hipotez Detayı — Bir Strateji Neyden İbaret?",
+                 "Leaderboard'daki kısa başlık yalnızca etikettir. Her hipotez aslında "
+                 "şu zengin içeriği taşır: test edilebilir iddia, ekonomik mekanizma, "
+                 "beklenen başarısızlık koşulları, asıl DSL sinyal formülü ve sonuçları "
+                 "görmeden taahhüt edilen çürütme eşiği (ön kayıt).",
+                 _details(conn)),
         _section("Çoklu Test Düzeltmesi — 'Kabul' ≠ 'İstatistiksel Geçerli'",
                  "Çok sayıda deneme yapıldığında yüksek bir Sharpe tesadüfen çıkabilir. "
                  "Deflated Sharpe (DSR) ve FDR bunu düzeltir: FDR 'GEÇTİ' değilse sonuç "
