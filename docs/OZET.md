@@ -106,6 +106,14 @@ holdout sonuçlarını görürsün.
 Normal koşu kilitli döneme dokunmaz; kabul edilen adaylar bu komutla BİR KEZ
 sınanır (one-shot, audit log). Araştırma-değerlendirme ayrımının gereği.
 
+**3c. Model karşılaştırması (hocanın istediği deney):**
+```
+.\.venv\Scripts\python.exe compare.py
+```
+`configs/compare.yaml`'daki yarışmacıları (ücretli/ücretsiz LLM'ler + random
+baseline) aynı veri ve bütçeyle koşturur; araştırma-verimliliği tablosunu
+terminale ve `runs/comparison.md`'ye yazar.
+
 **4. Dashboard'u aç:**
 Çalışma bitince proje klasöründe **`dashboard.html`** oluşur.
 Üstüne çift tıkla → tarayıcıda açılır. (Funnel, leaderboard, istatistik, holdout,

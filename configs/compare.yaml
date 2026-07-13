@@ -1,0 +1,33 @@
+# Model karşılaştırma deneyi (Doküman 15/26 — Deney A'nın modeller-arası hali).
+#
+# Her yarışmacı AYNI veri, AYNI kampanya kısıtları ve AYNI deney bütçesiyle
+# koşar; tek fark hipotez üreticisi. Çıktı: araştırma-verimliliği tablosu
+# (kabul, duplicate oranı, derleme hatası, en iyi DSR, token maliyeti).
+#
+#   python compare.py
+#
+# Notlar:
+#   - critic: dummy -> bütün yarışmacılara AYNI deterministik pipeline (adalet).
+#     LLM critic açılırsa üreticiler arası fark critic'in insafına karışır.
+#   - Literatür araması karşılaştırmada KAPALI (koşular arası varyans katmasın).
+#   - random-search = alt çıta: LLM bundan iyi değilse "LLM katkısı yok" demektir.
+compare:
+  contestants:
+    - label: gpt-4o-mini
+      provider: openrouter
+      model: openai/gpt-4o-mini
+      api_key_env: OPENROUTER_API_KEY
+      temperature: 0.9
+
+    - label: llama-3.3-70b-free
+      provider: openrouter
+      model: meta-llama/llama-3.3-70b-instruct:free
+      api_key_env: OPENROUTER_API_KEY
+      temperature: 0.9
+
+    - label: random-search
+      provider: random
+      seed: 0
+
+  critic: dummy            # dummy | models_yaml (models.yaml'daki critic'i kullan)
+  output_dir: runs         # yarışmacı başına ayrı hafıza DB'si buraya yazılır

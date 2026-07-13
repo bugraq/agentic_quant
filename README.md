@@ -81,6 +81,13 @@ tek tek `dummy → gerçek` yap. Baştan gerçek yapılacak iki şey:
   `index_membership` maskesiyle hisseyi yalnızca üye olduğu günlerde işleme sokar.
   Kalan dürüst sınırlar: Yahoo'da verisi hiç olmayan delist ticker'lar (yüklemede
   raporlanır) ve delisting return modeli yok — tam çözüm CRSP ister.
+- [x] Model karşılaştırma koşucusu (`python compare.py`) — aynı veri/bütçe/kısıtlarla
+  N üreticiyi (LLM'ler + random baseline) yarıştırır; araştırma-verimliliği tablosu
+  (kabul, tekrar, derleme hatası, en iyi DSR, FDR, token) + `runs/comparison.md`.
+  Yarışmacılar `configs/compare.yaml`'da. Critic varsayılan dummy (adalet),
+  literatür kapalı (varyans), holdout'a dokunulmaz.
+- [x] Revision karantinası — revizyonları 3+ kez duplicate üretmiş champion
+  revision için karantinaya alınır (komşuluk tükendi); sıradaki kabule geçilir.
 - [ ] Kripto adaptörü (ccxt)
 - [ ] (opsiyonel) lineage grafiği görselleştirmesi
 

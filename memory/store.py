@@ -145,6 +145,11 @@ class MemoryStore:
                FROM experiment WHERE decision='accept' AND returns_json IS NOT NULL""").fetchall()
         return [(h, t, s, dd, tn, json.loads(rj)) for h, t, s, dd, tn, rj in rows]
 
+    def stage_counts(self) -> dict[str, int]:
+        """Aşama bazında sayım (funnel / model karşılaştırma metrikleri)."""
+        return dict(self.conn.execute(
+            "SELECT stage, COUNT(*) FROM experiment GROUP BY stage").fetchall())
+
     def summary_by_decision(self) -> dict[str, int]:
         rows = self.conn.execute(
             "SELECT decision, COUNT(*) FROM experiment GROUP BY decision").fetchall()
@@ -189,14 +194,34 @@ class MemoryStore:
                FROM experiment WHERE sharpe IS NOT NULL
                ORDER BY sharpe DESC LIMIT 1""").fetchone()
 
-    def best_accepted(self) -> Optional[tuple]:
+    def best_accepted(self, exclude: "set | None" = None) -> Optional[tuple]:
         """En iyi KABUL EDİLMİŞ hipotez — revision champion'ı (Doküman 16.1).
         Ham Sharpe yerine 'doğrulanmış' (gate+fold+robustness geçmiş) olanı seçer,
-        böylece reddedilmiş yüksek-Sharpe peşinde koşulmaz. (json, sharpe) | None."""
-        return self.conn.execute(
-            """SELECT hypothesis_json, sharpe FROM experiment
+        böylece reddedilmiş yüksek-Sharpe peşinde koşulmaz. exclude'dakiler
+        (revizyonu tükenmiş champion'lar) atlanır. (json, sharpe) | None."""
+        rows = self.conn.execute(
+            """SELECT hypothesis_id, hypothesis_json, sharpe FROM experiment
                WHERE decision='accept' AND sharpe IS NOT NULL
-               ORDER BY sharpe DESC LIMIT 1""").fetchone()
+               ORDER BY sharpe DESC""").fetchall()
+        for hid, hjson, sharpe in rows:
+            if not exclude or hid not in exclude:
+                return (hjson, sharpe)
+        return None
+
+    def exhausted_revision_parent_ids(self, max_duplicates: int = 3) -> set:
+        """Revizyonları >= max_duplicates kez duplicate üretmiş champion'lar.
+
+        LLM bir champion'ın etrafında hep aynı yapıyı döndürüyorsa o komşuluk
+        TÜKENMİŞTİR; ısrar bütçe israfı (gerçek koşuda 24 slotun ~8'i böyle
+        yandı). Bu champion'lar revision için karantinaya alınır — kabul
+        kayıtları ve leaderboard'daki yerleri etkilenmez.
+        """
+        return {r[0] for r in self.conn.execute(
+            """SELECT parent_hypothesis_id FROM experiment
+               WHERE relation_type='refinement' AND decision='duplicate'
+                 AND parent_hypothesis_id IS NOT NULL
+               GROUP BY parent_hypothesis_id
+               HAVING COUNT(*) >= ?""", (max_duplicates,))}
 
     def inverted_parent_ids(self) -> set:
         """Daha önce inversion denenen parent'lar (sonuç ne olursa olsun).

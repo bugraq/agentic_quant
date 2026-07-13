@@ -103,7 +103,10 @@ def _decide_mode(iteration: int, memory: MemoryStore):
     Döndürür: (GenerationMode, parent_hypothesis | None, champion_sharpe | None)
     """
     # Champion = KABUL EDİLMİŞ en iyi hipotez (ham Sharpe peşinde koşma yok, Doküman 16.1).
-    champion = memory.best_accepted()   # (json, sharpe) | None
+    # Revizyonları defalarca duplicate üretmiş champion KARANTİNADA (komşuluğu
+    # tükendi); sıradaki en iyi kabule geçilir, o da yoksa keşfe dönülür.
+    champion = memory.best_accepted(
+        exclude=memory.exhausted_revision_parent_ids())   # (json, sharpe) | None
     champ_sharpe = champion[1] if champion else None
     # Keşif turları: sıfırdan yeni yön dene.
     if iteration < EXPLORE_ROUNDS:

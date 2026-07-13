@@ -76,8 +76,44 @@ def test_inversion_not_repeated():
     print("  [ok] aynı parent bir kez ters çevriliyor; aday bitince keşfe dönülüyor")
 
 
+def _accept(hid: str) -> Decision:
+    return Decision(hypothesis_id=hid, decision=DecisionType.accept,
+                    source=DecisionSource.gate, severity=Severity.low)
+
+
+def test_revision_quarantine():
+    """Revizyonları 3 kez duplicate üretmiş champion karantinaya alınmalı;
+    sıradaki en iyi kabule geçilmeli (gerçek koşu: 24 slotun ~8'i aynı
+    champion'ın duplicate revizyonuydu)."""
+    m = MemoryStore(":memory:")
+    m.record(_hyp("hyp_0001"), _accept("hyp_0001"), "accepted",
+             result=_result("hyp_0001", 0.9))      # champion
+    m.record(_hyp("hyp_0002"), _accept("hyp_0002"), "accepted",
+             result=_result("hyp_0002", 0.6))      # ikinci kabul
+
+    # Champion normalde hyp_0001 (Sharpe 0.9 > 0.6).
+    # NOT: iteration % 3 == 2 turları inversion'a ayrılır; revision turu seç (6).
+    mode, parent, _ = _decide_mode(iteration=6, memory=m)
+    assert mode == GenerationMode.revision and parent.hypothesis_id == "hyp_0001"
+
+    # hyp_0001'in revizyonları 3 kez duplicate üretti -> karantina
+    for k in range(3):
+        dup = Decision(hypothesis_id=f"hyp_d{k}", decision=DecisionType.duplicate,
+                       source=DecisionSource.novelty, severity=Severity.low)
+        m.record(_hyp(f"hyp_d{k}"), dup, "duplicate",
+                 parent_hypothesis_id="hyp_0001", relation_type="refinement")
+
+    assert "hyp_0001" in m.exhausted_revision_parent_ids()
+    mode2, parent2, _ = _decide_mode(iteration=7, memory=m)
+    assert mode2 == GenerationMode.revision and parent2.hypothesis_id == "hyp_0002", \
+        f"karantina çalışmadı: {mode2}, {parent2 and parent2.hypothesis_id}"
+    m.close()
+    print("  [ok] tükenen champion karantinada; revizyon sıradaki kabule geçti")
+
+
 def main():
     test_inversion_not_repeated()
+    test_revision_quarantine()
     print("OK — inversion kara deliği kapatıldı.")
 
 

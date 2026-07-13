@@ -11,3 +11,4 @@ data/*.csv
 # üretilen dashboard
 dashboard.html
 data/*.pkl
+runs/
