@@ -52,6 +52,7 @@ campaign:
     maximum_experiments: 8
     maximum_llm_tokens: 300000     # bu bütçe aşılınca kampanya durur
     cost_bps: 5.0                  # backtest işlem maliyeti (bps)
+    parameter_optimization: true   # kabul sonrası pencereleri optimizer arar (LLM değil)
 
   # --- Risk kısıtları (hard gate; sabit, LLM gameleyemez) ---
   risk_constraints:

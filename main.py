@@ -67,6 +67,7 @@ def main() -> None:
         max_turnover=float(risk.get("max_turnover", 300.0)),
         min_positive_folds=float(risk.get("min_positive_folds", 0.5)),
         research_fraction=float(hpol.get("research_fraction", 0.7)),
+        parameter_optimization=bool(budget.get("parameter_optimization", False)),
     )
 
     # Model TAK-ÇALIŞTIR: üretici + bağımsız eleştirmen config'ten kurulur
