@@ -32,8 +32,11 @@ def fetch_literature_mechanisms(client: OpenAICompatibleClient, model: str,
             f"Her biri için TEK satır: 'Anomali adı — kısa mekanizma "
             f"(alanlar: ...)'. Sadece liste, başka açıklama yok.")
     try:
+        # Kısa timeout: web_search yavaş/takılı kalabilir; literatür OLMAZSA OLMAZ
+        # değil — süre dolunca kampanya literatürsüz devam eder (bloke etmez).
         resp = client.chat(model, _SYSTEM, user, temperature=0.3,
-                           force_json=False, max_tokens=800, web_search=True)
+                           force_json=False, max_tokens=800, web_search=True,
+                           timeout=90.0)
     except Exception as e:  # noqa: BLE001 — arama başarısızsa literatürsüz devam
         print(f"[literatür] web araması başarısız ({type(e).__name__}); literatürsüz devam.")
         return []

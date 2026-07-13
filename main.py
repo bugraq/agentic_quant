@@ -82,7 +82,7 @@ def main() -> None:
     if gen_cfg.get("web_search") and hasattr(provider, "client"):
         from agents.literature import fetch_literature_mechanisms
         from orchestrator.loop import ANONYMOUS_UNIVERSE
-        print("Literatür aranıyor (web_search)...")
+        print("Literatür aranıyor (web_search, en fazla ~90 sn; olmazsa literatürsüz devam)...")
         # Anonimleştirme açıkken literatür ajanı da ticker/tarih GÖRMEZ.
         lit_universe = (ANONYMOUS_UNIVERSE if cfg.anonymize_universe
                         else campaign["universe_description"])

@@ -13,7 +13,12 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
-from openai import OpenAI
+from openai import BadRequestError, OpenAI
+
+# SDK varsayılanı 600 sn (10 dk!) + 2 otomatik retry = takılan istek yarım saat
+# bekletebilir (gerçek koşuda görüldü: 'Literatür aranıyor...' ekranda kaldı).
+DEFAULT_TIMEOUT = 120.0   # saniye; tekil istek için makul üst sınır
+DEFAULT_RETRIES = 1
 
 
 @dataclass
@@ -26,18 +31,21 @@ class LLMResponse:
 
 class OpenAICompatibleClient:
     def __init__(self, base_url: str, api_key_env: str,
-                 default_headers: Optional[dict] = None) -> None:
+                 default_headers: Optional[dict] = None,
+                 timeout: float = DEFAULT_TIMEOUT) -> None:
         api_key = os.environ.get(api_key_env)
         if not api_key:
             raise RuntimeError(
                 f"'{api_key_env}' ortam değişkeni yok. Key'i .env dosyasına ekle "
                 f"(örn. {api_key_env}=sk-...). Key koda girmemeli.")
         self.client = OpenAI(base_url=base_url, api_key=api_key,
-                             default_headers=default_headers or {})
+                             default_headers=default_headers or {},
+                             timeout=timeout, max_retries=DEFAULT_RETRIES)
 
     def chat(self, model: str, system: str, user: str, temperature: float = 0.7,
              force_json: bool = True, max_tokens: int = 4000,
-             web_search: bool = False) -> LLMResponse:
+             web_search: bool = False,
+             timeout: Optional[float] = None) -> LLMResponse:
         kwargs: dict = dict(
             model=model,
             messages=[{"role": "system", "content": system},
@@ -45,6 +53,8 @@ class OpenAICompatibleClient:
             temperature=temperature,
             max_tokens=max_tokens,
         )
+        if timeout is not None:
+            kwargs["timeout"] = timeout   # istek bazında üst sınır (örn. literatür)
         if force_json:
             kwargs["response_format"] = {"type": "json_object"}
         if web_search:
@@ -55,8 +65,10 @@ class OpenAICompatibleClient:
                  "parameters": {"engine": "auto", "max_results": 5}}]}
         try:
             resp = self.client.chat.completions.create(**kwargs)
-        except Exception:
-            # Bazı modeller response_format desteklemez; JSON zorlamadan tekrar dene.
+        except BadRequestError:
+            # Bazı modeller response_format desteklemez; JSON zorlamadan tekrar
+            # dene. (Timeout/ağ hatasında TEKRAR DENEME — yukarı fırlat ki çağıran
+            # taraf 'literatürsüz devam' gibi kararını verebilsin.)
             if force_json:
                 kwargs.pop("response_format", None)
                 resp = self.client.chat.completions.create(**kwargs)
