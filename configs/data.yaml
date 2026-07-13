@@ -1,0 +1,19 @@
+# Veri kaynağı — TAK-ÇALIŞTIR (sentetik <-> gerçek). Kod değişmez.
+data:
+  source: synthetic          # synthetic | yfinance
+
+  synthetic:
+    kind: momentum           # momentum | reversal | random
+    n_sec: 20
+    n_days: 750
+    seed: 7
+
+  # Gerçek veriye geçmek için source: yfinance yap.
+  # UYARI: yfinance sabit ticker listesiyle survivorship bias taşır (Doküman 7).
+  yfinance:
+    tickers: [AAPL, MSFT, GOOGL, AMZN, META, NVDA, TSLA, JPM, JNJ, V,
+              PG, HD, MA, XOM, BAC, KO, PFE, CSCO, INTC, WMT]
+    start: "2015-01-01"
+    end: "2020-12-31"
+
+  research_fraction: 0.7     # geri kalanı KİLİTLİ holdout

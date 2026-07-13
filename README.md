@@ -56,7 +56,8 @@ tek tek `dummy → gerçek` yap. Baştan gerçek yapılacak iki şey:
 - [x] Walk-forward (çoklu fold, tutarlılık) + robustness (permutation testi, maliyet 2x, parametre perturbasyonu)
 - [x] Holdout servisi (LLM'den ayrı, kilitli dönem, one-shot, audit log, aday kotası)
 - [x] Critic ajanı (bağımsız LLM, farklı prompt+düşük sıcaklık, ekonomik mekanizma denetimi)
-- [ ] Point-in-time gerçek veri (sp500/kripto adaptörü)
+- [x] DataAdapter (sentetik <-> gerçek tak-çalıştır); yfinance ile gerçek S&P 500 (survivorship uyarısıyla)
+- [ ] Kripto adaptörü (ccxt), point-in-time endeks üyeliği, delisting
 - [ ] (opsiyonel) Research dashboard, Pareto sıralama, bandit bütçe tahsisi
 
 ### LLM sağlayıcısı (esnek)

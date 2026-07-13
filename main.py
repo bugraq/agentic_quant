@@ -18,8 +18,7 @@ import yaml
 from dotenv import load_dotenv
 
 from contracts.hypothesis_spec import HypothesisSpec
-from data import gen_cross_sectional_momentum
-from data.synthetic import split_by_fraction
+from data import make_adapter, split_by_fraction
 from evaluation import build_report, print_report
 from holdout import HoldoutService
 from llm import make_critic, make_provider
@@ -40,6 +39,7 @@ def main() -> None:
     load_dotenv(os.path.join(HERE, ".env"))   # API key'i ortama yükle (koda girmez)
     campaign = load_yaml("campaign.yaml")["campaign"]
     models = load_yaml("models.yaml")["models"]
+    data_cfg = load_yaml("data.yaml")["data"]
 
     cfg = CampaignConfig(
         goal=campaign["goal"],
@@ -54,10 +54,11 @@ def main() -> None:
     provider = make_provider(models["hypothesis_generator"])
     critic = make_critic(models.get("quant_critic", {"provider": "dummy"}))
 
-    # Veri: araştırma / KİLİTLİ holdout olarak bölünür. Kampanya yalnızca
-    # araştırma verisini görür; holdout ayrı serviste kalır (Doküman 2.2).
-    full = gen_cross_sectional_momentum(n_sec=20, n_days=750, seed=7)
-    data, holdout_data = split_by_fraction(full, research_frac=0.7)
+    # Veri: adaptörden (sentetik/gerçek config'ten) yüklenir, sonra araştırma /
+    # KİLİTLİ holdout olarak bölünür. Kampanya yalnızca araştırma verisini görür.
+    adapter = make_adapter(data_cfg)
+    full = adapter.load()
+    data, holdout_data = split_by_fraction(full, data_cfg.get("research_fraction", 0.7))
 
     # Temiz başlangıç için eski hafızayı sil
     if os.path.exists(DB_PATH):
