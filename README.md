@@ -58,7 +58,9 @@ tek tek `dummy → gerçek` yap. Baştan gerçek yapılacak iki şey:
 - [x] Critic ajanı (bağımsız LLM, farklı prompt+düşük sıcaklık, ekonomik mekanizma denetimi)
 - [x] DataAdapter (sentetik <-> gerçek tak-çalıştır); yfinance ile gerçek S&P 500 (survivorship uyarısıyla)
 - [x] Bandit bütçe tahsisi (Thompson sampling) — araştırma bütçesini aileler arasında başarıya göre dağıtır
-- [x] Research dashboard — tek dosyalık statik HTML (funnel, leaderboard, multiple-testing, holdout, aile perf.)
+- [x] Research dashboard — funnel, leaderboard, hipotez detayı, multiple-testing, holdout, aile perf., soy ağacı
+- [x] Reproducibility metadata (model, prompt/output hash, seed) — her deney yeniden üretilebilir (Doküman 17.3/25.5)
+- [x] Lineage (soy ağacı) + inversion modu (başarısızı ters çevir) + universe filtreleri + ek-gecikme robustness
 - [ ] Kripto adaptörü (ccxt), point-in-time endeks üyeliği, delisting
 - [ ] (opsiyonel) Pareto çok-amaçlı sıralama, lineage grafiği
 

@@ -30,6 +30,7 @@ class RobustnessResult:
     permutation_pvalue: float      # gerçek Sharpe'ı geçen permütasyon oranı
     cost2x_sharpe: float
     param_min_sharpe: float        # perturbasyonlar arası en kötü Sharpe
+    extra_delay_sharpe: float      # bir bar ek execution gecikmesiyle Sharpe
     robust: bool
 
 
@@ -83,6 +84,10 @@ def run_robustness(graph, hyp: HypothesisSpec, data: MarketData,
     pnl2x, _ = compute_pnl(signal, hyp, data, cost_bps * 2)
     cost2x_sharpe = _sharpe(pnl2x)
 
+    # Bir bar ek execution gecikmesi (9.2): alpha çok hızlı/kırılgansa çöker
+    pnl_delay, _ = compute_pnl(signal.shift(1), hyp, data, cost_bps)
+    extra_delay_sharpe = _sharpe(pnl_delay)
+
     # Parametre perturbasyonu (±%20)
     param_sharpes = []
     for factor in (0.8, 1.25):
@@ -94,6 +99,8 @@ def run_robustness(graph, hyp: HypothesisSpec, data: MarketData,
             param_sharpes.append(0.0)
     param_min = min(param_sharpes) if param_sharpes else 0.0
 
-    robust = (perm_p < 0.10) and (cost2x_sharpe > 0) and (param_min > 0)
+    robust = ((perm_p < 0.10) and (cost2x_sharpe > 0) and (param_min > 0)
+              and (extra_delay_sharpe > 0))
     return RobustnessResult(permutation_pvalue=perm_p, cost2x_sharpe=cost2x_sharpe,
-                            param_min_sharpe=param_min, robust=robust)
+                            param_min_sharpe=param_min,
+                            extra_delay_sharpe=extra_delay_sharpe, robust=robust)

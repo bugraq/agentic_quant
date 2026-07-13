@@ -221,13 +221,14 @@ def _signal_formula(e: dict) -> str:
 
 def _details(conn) -> str:
     """Hipotez detayı (Doküman 20) — kabul edilen stratejilerin TAM içeriği."""
-    rows = _q(conn, """SELECT hypothesis_id, sharpe, hypothesis_json FROM experiment
+    rows = _q(conn, """SELECT hypothesis_id, sharpe, hypothesis_json, model_name, prompt_hash, seed
+                       FROM experiment
                        WHERE decision='accept' AND hypothesis_json IS NOT NULL
                        ORDER BY sharpe DESC LIMIT 6""")
     if not rows:
         return '<div class="card desc">Detay gösterilecek kabul edilmiş strateji yok.</div>'
     cards = []
-    for hid, sharpe, hj in rows:
+    for hid, sharpe, hj, model_name, prompt_hash, seed in rows:
         h = json.loads(hj)
         mech = h.get("economic_mechanism", {})
         fails = mech.get("expected_failure_conditions", []) or []
@@ -241,8 +242,24 @@ def _details(conn) -> str:
   <div class="drow"><b>Aile / portföy:</b> {_esc(h.get('family',''))} · {_esc(h.get('portfolio',{}).get('type',''))}</div>
   <div class="drow"><b>Sinyal (DSL formülü):</b><br><code>{_esc(_signal_formula(h.get('signal',{})))}</code></div>
   <div class="drow"><b>Çürütme eşiği (ön kayıt):</b> min OOS Sharpe {f.get('minimum_oos_sharpe','—')}, maks turnover {f.get('maximum_turnover','—')}, maks DD {f.get('maximum_drawdown','—')}</div>
+  <div class="drow"><b>Tekrar-üretilebilirlik:</b> model {_esc(model_name or '—')} · prompt {_esc(prompt_hash or '—')} · seed {_esc(seed if seed is not None else '—')}</div>
 </div>""")
     return "".join(cards)
+
+
+def _lineage(conn) -> str:
+    """Hipotez soy ağacı (Doküman 13/20) — parent -> child ilişkileri."""
+    rows = _q(conn, """SELECT parent_hypothesis_id, hypothesis_id, relation_type, decision
+                       FROM experiment WHERE parent_hypothesis_id IS NOT NULL
+                       ORDER BY id""")
+    if not rows:
+        return '<div class="card desc">Henüz türetilmiş (revision/inversion) hipotez yok.</div>'
+    body = "".join(
+        f'<tr><td>{_esc(p)}</td><td>→ {_esc(rel or "?")} →</td><td>{_esc(c)}</td>'
+        f'<td>{_esc(dec)}</td></tr>'
+        for p, c, rel, dec in rows)
+    return ('<div class="card"><table><tr><th>Ebeveyn</th><th>İlişki</th>'
+            '<th>Türev</th><th>Sonuç</th></tr>' + body + "</table></div>")
 
 
 def _families(conn) -> str:
@@ -304,6 +321,11 @@ def generate_dashboard(memory_db: str, holdout_db: str, out_path: str,
                  "Her strateji ailesinin kabul/toplam oranı. Sistem araştırma bütçesini "
                  "başarılı ailelere Thompson sampling (bandit) ile kaydırır.",
                  _families(conn)),
+        _section("Hipotez Soy Ağacı (Lineage)",
+                 "Bir hipotezin başka bir hipotezden nasıl türetildiği: revision "
+                 "(champion'ı geliştir), inversion (başarısızı ters çevir). Araştırmanın "
+                 "kör deneme değil, yönlü bir keşif olduğunu gösterir.",
+                 _lineage(conn)),
     ]
     conn.close()
     doc = (f'<!doctype html><html lang="tr"><head><meta charset="utf-8">'

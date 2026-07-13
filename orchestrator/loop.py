@@ -30,6 +30,13 @@ from evaluation.robustness import run_robustness
 
 EXPLORE_ROUNDS = 3   # ilk turlar: keşif (sıfırdan yeni). Sonra: champion'ı geliştir.
 
+# Üretim modu -> lineage relation_type (Doküman 13)
+_RELATION = {
+    GenerationMode.revision: "refinement",
+    GenerationMode.inversion: "inversion",
+    GenerationMode.combination: "combination",
+}
+
 # Deney yaşam döngüsü aşamaları (Doküman 22, iskelet alt kümesi)
 STAGE_COMPILE_ERROR = "compile_error"
 STAGE_STATIC_REJECTED = "static_rejected"
@@ -66,8 +73,14 @@ def _decide_mode(iteration: int, memory: MemoryStore):
     champion = memory.best_by_sharpe()   # (json, sharpe, decision) | None
     if iteration < EXPLORE_ROUNDS or champion is None or (champion[1] or -1) <= 0:
         return GenerationMode.new, None, (champion[1] if champion else None)
-    parent = HypothesisSpec.model_validate_json(champion[0])
-    return GenerationMode.revision, parent, champion[1]
+    # Exploit fazı: her 3. turda başarısız bir hipotezi TERS ÇEVİR (inversion),
+    # aksi halde champion'ı geliştir (revision).
+    if iteration % 3 == 2:
+        failed = memory.worst_failed_hypothesis()
+        if failed:
+            return (GenerationMode.inversion,
+                    HypothesisSpec.model_validate_json(failed[0]), champion[1])
+    return GenerationMode.revision, HypothesisSpec.model_validate_json(champion[0]), champion[1]
 
 
 def _build_context(cfg: CampaignConfig, memory: MemoryStore, remaining: int,
@@ -116,6 +129,16 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
         mode_tag = mode.value + (f"<-{parent.hypothesis_id}" if parent else "")
         tag = f"[{i+1}/{cfg.max_experiments}] ({mode_tag}) {hyp.hypothesis_id} {hyp.title}"
 
+        # Reproducibility (17.3) + lineage (13): her kayda eklenecek ortak metadata
+        parent_id = parent.hypothesis_id if parent else None
+        relation = _RELATION.get(mode)
+        meta = dict(llm_meta=getattr(provider, "last_meta", None),
+                    parent_hypothesis_id=parent_id, relation_type=relation)
+        _mrec = memory.record
+
+        def rec(h, d, s, result=None):
+            return _mrec(h, d, s, result=result, **meta)
+
         # 1) Derle (yapısal hatalar burada)
         try:
             graph = compile_hypothesis(hyp)
@@ -123,14 +146,14 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
             dec = Decision(hypothesis_id=hyp.hypothesis_id, decision=DecisionType.reject,
                            source=DecisionSource.gate, severity=Severity.high,
                            issues=[Issue(type="compile_error", description=str(e))])
-            memory.record(hyp, dec, STAGE_COMPILE_ERROR)
+            rec(hyp, dec, STAGE_COMPILE_ERROR)
             print(f"{tag} -> REDDEDİLDİ (derleme): {e}")
             continue
 
         # 2) Statik doğrula (SIZINTI kontrolü)
         static = validate(graph, hyp)
         if static.decision != DecisionType.accept:
-            memory.record(hyp, static, STAGE_STATIC_REJECTED)
+            rec(hyp, static, STAGE_STATIC_REJECTED)
             reason = static.issues[0].type if static.issues else "?"
             print(f"{tag} -> {static.decision.value.upper()} (statik): {reason}")
             continue
@@ -138,7 +161,7 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
         # 3a) Yapısal yenilik kontrolü (backtest'ten ÖNCE — bütçe korur)
         dup = novelty.check_structural(hyp)
         if dup:
-            memory.record(hyp, _duplicate_decision(hyp, dup, "yapısal"), STAGE_DUPLICATE)
+            rec(hyp, _duplicate_decision(hyp, dup, "yapısal"), STAGE_DUPLICATE)
             print(f"{tag} -> DUPLICATE (yapısal, ~{dup}) — backtest atlandı")
             continue
 
@@ -148,7 +171,7 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
         except Exception:  # noqa: BLE001 — eleştirmen hatası araştırmayı bloklamasın
             crit = None
         if crit is not None and crit.decision != DecisionType.accept:
-            memory.record(hyp, crit, STAGE_CRITIC_REJECTED)
+            rec(hyp, crit, STAGE_CRITIC_REJECTED)
             reason = crit.issues[0].type if crit.issues else "?"
             print(f"{tag} -> {crit.decision.value.upper()} (critic): {reason}")
             continue
@@ -157,7 +180,7 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
         signal = evaluate_signal(graph, data)
         dup = novelty.check_behavioral(signal)
         if dup:
-            memory.record(hyp, _duplicate_decision(hyp, dup, "davranışsal"), STAGE_DUPLICATE)
+            rec(hyp, _duplicate_decision(hyp, dup, "davranışsal"), STAGE_DUPLICATE)
             print(f"{tag} -> DUPLICATE (davranışsal, ~{dup})")
             continue
 
@@ -170,7 +193,7 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
         # 4) Hard gate (kampanya sabit eşiği + fold tutarlılığı)
         gate = hard_gate_evaluate(result, hyp, cfg.min_acceptance_sharpe)
         if gate.decision != DecisionType.accept:
-            memory.record(hyp, gate, STAGE_GATE_REJECTED, result=result)
+            rec(hyp, gate, STAGE_GATE_REJECTED, result=result)
             reason = gate.issues[0].type if gate.issues else "?"
             print(f"{tag} -> RED (gate, Sharpe {sharpe:.2f}): {reason}")
             continue
@@ -185,11 +208,11 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
                               description=(f"perm_p={rob.permutation_pvalue:.2f}, "
                                            f"cost2x_Sharpe={rob.cost2x_sharpe:.2f}, "
                                            f"param_min_Sharpe={rob.param_min_sharpe:.2f}"))])
-            memory.record(hyp, dec, STAGE_ROBUSTNESS_REJECTED, result=result)
+            rec(hyp, dec, STAGE_ROBUSTNESS_REJECTED, result=result)
             print(f"{tag} -> RED (sağlamlık, Sharpe {sharpe:.2f}): "
                   f"perm_p={rob.permutation_pvalue:.2f}")
             continue
 
-        memory.record(hyp, gate, STAGE_ACCEPTED, result=result)
+        rec(hyp, gate, STAGE_ACCEPTED, result=result)
         print(f"{tag} -> KABUL (Sharpe {sharpe:.2f}, perm_p={rob.permutation_pvalue:.2f}, "
               f"cost2x={rob.cost2x_sharpe:.2f})")

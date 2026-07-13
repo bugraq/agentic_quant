@@ -42,8 +42,25 @@ def _max_drawdown(equity: pd.Series) -> float:
     return float(-dd.min()) if len(dd) else 0.0
 
 
+def _universe_mask(hyp: HypothesisSpec, data: MarketData, signal):
+    """Universe filtrelerini (min_price, min_dollar_volume) point-in-time uygula.
+
+    Filtreyi geçmeyen varlıklar o tarihte işlemden çıkarılır (sinyal NaN).
+    Doküman 4.4/2.4 — deklare edilen evren kısıtları gerçekten uygulanmalı.
+    """
+    u = hyp.universe
+    mask = signal.notna()
+    if u.minimum_price is not None:
+        mask &= (data.get("close") >= u.minimum_price)
+    if u.minimum_median_dollar_volume is not None:
+        med_dv = data.get("dollar_volume").rolling(20, min_periods=5).median()
+        mask &= (med_dv >= u.minimum_median_dollar_volume)
+    return signal.where(mask)
+
+
 def compute_pnl(signal, hyp: HypothesisSpec, data: MarketData, cost_bps: float):
     """Sinyal -> (net_pnl, turnover_t) serileri. Motor çekirdeği; tekrar kullanılır."""
+    signal = _universe_mask(hyp, data, signal)   # evren filtresi (point-in-time)
     long_q = hyp.portfolio.long_quantile or 0.1
     short_q = hyp.portfolio.short_quantile or 0.1
     weights = _build_weights(signal, long_q, short_q)

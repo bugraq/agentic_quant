@@ -80,6 +80,8 @@ class DummyProvider:
     def __init__(self) -> None:
         self._catalog = _catalog()
         self._i = 0
+        self.last_meta = {"model_name": "dummy", "temperature": None,
+                          "prompt_hash": None, "output_hash": None}
 
     def next(self, context: ResearchContext) -> HypothesisSpec:
         spec = self._catalog[self._i % len(self._catalog)]

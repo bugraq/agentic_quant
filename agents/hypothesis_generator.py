@@ -11,6 +11,7 @@ operatörlerden ağaç kurabilir.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 
 from contracts.hypothesis_spec import HypothesisFamily, HypothesisSpec
@@ -95,8 +96,16 @@ def _build_user_prompt(ctx: ResearchContext) -> str:
     ) or "  (henüz yok)"
     lessons = "\n".join(f"  - {l}" for l in ctx.lessons) or "  (henüz yok)"
 
-    # Revision modu: champion'ı geliştir. Yeni mod: keşfet.
-    if ctx.generation_mode.value == "revision" and ctx.parent_hypothesis is not None:
+    # Inversion: başarısız hipotezi ters çevir. Revision: champion'ı geliştir. Yeni: keşfet.
+    if ctx.generation_mode.value == "inversion" and ctx.parent_hypothesis is not None:
+        parent_json = ctx.parent_hypothesis.model_dump_json(indent=0)
+        task = f"""GÖREV — TERS ÇEVİRME (inversion): Aşağıdaki hipotez NEGATİF Sharpe ile
+başarısız oldu. Sinyalin YÖNÜNÜ ters çevir (örn. en dışa negate ekle ya da long/short
+mantığını çevir) — ters yön kazanıyor olabilir. claim ve title'ı da tersine güncelle.
+
+BAŞARISIZ HİPOTEZ:
+{parent_json}"""
+    elif ctx.generation_mode.value == "revision" and ctx.parent_hypothesis is not None:
         parent_json = ctx.parent_hypothesis.model_dump_json(indent=0)
         task = f"""GÖREV — REVİZYON: Aşağıdaki en iyi hipotezi (champion) GELİŞTİR.
 Çalışan temel yapıyı KORU, TEK bir şeyi anlamlı biçimde değiştir (örn. pencere
@@ -154,6 +163,15 @@ class LLMHypothesisProvider:
         self._counter = 0
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
+        self.last_meta: dict = {}   # son çağrının reproducibility metadata'sı
+
+    def _set_meta(self, system: str, user: str, resp) -> None:
+        self.last_meta = {
+            "model_name": resp.model or self.model,
+            "temperature": self.temperature,
+            "prompt_hash": hashlib.sha256((system + user).encode()).hexdigest()[:16],
+            "output_hash": hashlib.sha256(resp.text.encode()).hexdigest()[:16],
+        }
 
     def next(self, context: ResearchContext) -> HypothesisSpec:
         self._counter += 1
@@ -164,6 +182,7 @@ class LLMHypothesisProvider:
         resp = self.client.chat(self.model, system, user,
                                 temperature=self.temperature, max_tokens=self.max_tokens)
         self._track(resp)
+        self._set_meta(system, user, resp)
 
         try:
             return self._parse(resp.text, hid)
@@ -174,6 +193,7 @@ class LLMHypothesisProvider:
             resp2 = self.client.chat(self.model, system, repair_user,
                                      temperature=0.2, max_tokens=self.max_tokens)
             self._track(resp2)
+            self._set_meta(system, repair_user, resp2)
             return self._parse(resp2.text, hid)
 
     def _parse(self, text: str, hid: str) -> HypothesisSpec:
