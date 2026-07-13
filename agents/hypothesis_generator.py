@@ -98,6 +98,12 @@ KRİTİK KURALLAR (yoksa hipotez reddedilir):
   - volatility, rolling_std, zscore, return vb. OPERATÖRDÜR — veri alanı DEĞİL.
     Girdi olarak bir alan alırlar: {{"op":"volatility","window":20,"inputs":[
     {{"op":"field","field":"close"}}]}}. 'volatility'yi field olarak KULLANMA.
+  - conditional TAM 3 girdi alır ve sırası şudur: [koşul, koşul-doğruysa-değer,
+    koşul-yanlışsa-değer]. Örn. yüksek volatilitede reversal, düşükte momentum:
+    {{"op":"conditional","inputs":[
+      {{"op":"greater_than","inputs":[<volatilite>, <eşik>]}},
+      <reversal_sinyali>, <momentum_sinyali>]}}. 2 girdi verme — derleme hatası olur.
+  - greater_than / less_than / multiply / subtract TAM 2 girdi alır.
   - DÜRÜST ETİKET: title, claim ve family, sinyalin GERÇEKTE yaptığıyla uyuşmalı.
     'regime-conditioned' diyorsan sinyalde conditional/greater_than/volatilite
     OLMALI; 'composite' diyorsan birden çok sinyali birleştirmelisin. Sade

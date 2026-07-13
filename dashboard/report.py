@@ -243,6 +243,124 @@ def _signal_formula(e: dict) -> str:
     return f"{op}({inner}{w})"
 
 
+# --- Düz Türkçe çeviri (quant olmayan biri okuyunca anlasın) ---------------
+_FIELD_TR = {
+    "close": "kapanış fiyatı", "open": "açılış fiyatı", "high": "gün-içi en yüksek",
+    "low": "gün-içi en düşük", "adjusted_close": "düzeltilmiş kapanış",
+    "volume": "işlem hacmi", "dollar_volume": "dolar hacmi", "market_cap": "piyasa değeri",
+}
+
+
+def _describe_node(e: dict, feats: dict) -> str:
+    """DSL düğümünü düz Türkçe bir ifadeye çevirir (özyinelemeli)."""
+    op = e.get("op")
+    if op == "field":
+        return _FIELD_TR.get(e.get("field"), e.get("field") or "?")
+    if op == "const":
+        return str(e.get("value"))
+    if op == "feature_ref":
+        name = e.get("name") or "?"
+        return _describe_node(feats[name], feats) if name in feats else name
+    ins = [i for i in e.get("inputs", []) if isinstance(i, dict)]
+    a = _describe_node(ins[0], feats) if ins else "?"
+    b = _describe_node(ins[1], feats) if len(ins) > 1 else "?"
+    w = e.get("window")
+    gun = f"{w} günlük" if w else ""
+    if op == "return":
+        return f"son {gun} getirisi"
+    if op in ("rolling_mean", "ewma"):
+        return f"{a} — {gun} ortalaması"
+    if op in ("rolling_std", "volatility"):
+        return f"{a} — {gun} oynaklığı"
+    if op == "zscore":
+        return f"{a} — {gun} z-skoru (ortalamadan kaç std sapmış)"
+    if op == "delta":
+        return f"{a} — {gun} değişimi"
+    if op in ("rolling_min",):
+        return f"{a} — {gun} dip"
+    if op in ("rolling_max",):
+        return f"{a} — {gun} tepe"
+    if op in ("cross_sectional_rank", "quantile", "rolling_rank"):
+        return f"{a} sıralaması"
+    if op in ("normalize", "demean", "neutralize_market", "neutralize_sector"):
+        return f"piyasadan arındırılmış {a}"
+    if op == "winsorize":
+        return f"aşırı uçları budanmış {a}"
+    if op == "negate":
+        return f"{a} (tersi — düşük olanı öne alır)"
+    if op == "multiply":
+        return f"{a} × {b}"
+    if op in ("divide", "ratio"):
+        return f"{a} / {b}"
+    if op == "add":
+        return f"{a} + {b}"
+    if op == "subtract":
+        return f"{a} eksi {b}"
+    if op == "greater_than":
+        return f"{a} > {b} koşulu"
+    if op == "less_than":
+        return f"{a} < {b} koşulu"
+    if op == "conditional":
+        c = _describe_node(ins[2], feats) if len(ins) > 2 else "?"
+        return f"eğer {a} ise {b}, değilse {c}"
+    if op == "correlation":
+        return f"{a} ile {b} korelasyonu ({gun})"
+    return f"{op}({a})"
+
+
+def _plain_strategy(h: dict) -> str:
+    """Hipotezi tek cümlelik düz Türkçe stratejiye çevirir (sinyal + portföy)."""
+    feats = {f.get("name"): f.get("expression", {})
+             for f in h.get("features", []) if isinstance(f, dict)}
+    core = _describe_node(h.get("signal", {}), feats)
+    ptype = h.get("portfolio", {}).get("type", "")
+    if "long_short" in ptype:
+        action = ("hisseleri bu değere göre sıralar; en yüksek olanları AL (long), "
+                  "en düşük olanları SAT (short)")
+    elif "long_only" in ptype:
+        action = "en yüksek değere sahip hisseleri AL (sadece long), gerisini alma"
+    else:
+        action = "hisseleri bu değere göre seçer"
+    return f"Her gün her hisse için <b>{core}</b> hesaplanır; sonra {action}."
+
+
+# İssue tipi -> insan-dostu Türkçe başlık (reddetme nedeni)
+_REASON_TR = {
+    "compile_error": "Derlenmedi (geçersiz strateji yapısı)",
+    "lookahead": "Geleceğe bakma (sızıntı) tespit edildi",
+    "leakage": "Veri sızıntısı tespit edildi",
+    "disallowed_field": "İzin verilmeyen veri alanı kullandı",
+    "disallowed_operator": "İzin verilmeyen operatör kullandı",
+    "yapısal_duplicate": "Daha önce denenen bir stratejiyle aynı (yapısal tekrar)",
+    "davranışsal_duplicate": "Başka bir stratejiyle neredeyse aynı sinyali üretti (tekrar)",
+    "not_robust": "Sağlamlık testlerini geçemedi (şansa/ayara aşırı bağımlı)",
+    "claim_signal_mismatch": "İddia ile sinyal uyuşmuyor (critic reddi)",
+    "sharpe_below_threshold": "Getiri/risk (Sharpe) eşiğin altında",
+    "drawdown_exceeded": "Maksimum düşüş sınırı aşıldı",
+    "turnover_exceeded": "İşlem sıklığı (turnover) sınırı aşıldı",
+    "insufficient_positive_folds": "Dönemler arası tutarsız (yeterli pozitif fold yok)",
+}
+
+
+def _humanize_issue(issues_json: str | None) -> str:
+    """issues_json'daki ilk sorunu insan-dostu bir cümleye çevirir."""
+    if not issues_json:
+        return "—"
+    try:
+        issues = json.loads(issues_json)
+    except (json.JSONDecodeError, TypeError):
+        return "—"
+    if not issues:
+        return "—"
+    it = issues[0]
+    typ = it.get("type", "")
+    label = _REASON_TR.get(typ)
+    desc = it.get("description", "")
+    if label:
+        return f"{label}" + (f" — {desc}" if desc else "")
+    return desc or typ or "—"
+
+
 def _details(conn) -> str:
     """Hipotez detayı (Doküman 20) — kabul edilen stratejilerin TAM içeriği."""
     rows = _q(conn, """SELECT hypothesis_id, sharpe, hypothesis_json, model_name, prompt_hash, seed
@@ -260,6 +378,7 @@ def _details(conn) -> str:
         cards.append(f"""<div class="detail">
   <div class="dh"><span class="did">{_esc(hid)}</span> {_esc(h.get('title',''))}
     <span class="dsh">Sharpe {sharpe:.2f}</span></div>
+  <div class="drow"><b>Ne yapıyor (düz anlatım):</b> {_plain_strategy(h)}</div>
   <div class="drow"><b>İddia:</b> {_esc(h.get('claim',''))}</div>
   <div class="drow"><b>Ekonomik mekanizma:</b> {_esc(mech.get('type',''))} — {_esc(mech.get('description',''))}</div>
   <div class="drow"><b>Beklenen başarısızlık koşulları:</b> {_esc(', '.join(fails) or '—')}</div>
@@ -267,6 +386,44 @@ def _details(conn) -> str:
   <div class="drow"><b>Sinyal (DSL formülü):</b><br><code>{_esc(_signal_formula(h.get('signal',{})))}</code></div>
   <div class="drow"><b>Çürütme eşiği (ön kayıt):</b> min OOS Sharpe {f.get('minimum_oos_sharpe','—')}, maks turnover {f.get('maximum_turnover','—')}, maks DD {f.get('maximum_drawdown','—')}</div>
   <div class="drow"><b>Tekrar-üretilebilirlik:</b> model {_esc(model_name or '—')} · prompt {_esc(prompt_hash or '—')} · seed {_esc(seed if seed is not None else '—')}</div>
+</div>""")
+    return "".join(cards)
+
+
+def _all_hypotheses(conn) -> str:
+    """Denenen HER hipotez (kabul+red) — düz Türkçe strateji + sonuç + neden.
+
+    Bu bölüm kampanyanın asıl hikâyesidir: LLM ne denedi, ne oldu, NİYE. Kabul
+    çıkmasa bile (gerçek veride sık olur) sistemin ne yaptığı buradan anlaşılır.
+    """
+    rows = _q(conn, """SELECT hypothesis_id, title, family, decision, sharpe,
+                              hypothesis_json, issues_json
+                       FROM experiment ORDER BY id""")
+    if not rows:
+        return '<div class="card desc">Henüz hipotez üretilmedi.</div>'
+
+    def _pill(dec: str) -> str:
+        if dec == "accept":
+            return '<span class="pill good">KABUL</span>'
+        if dec == "duplicate":
+            return '<span class="pill muted">TEKRAR</span>'
+        return '<span class="pill bad">RED</span>'
+
+    cards = []
+    for hid, title, family, dec, sharpe, hj, issues in rows:
+        h = json.loads(hj) if hj else {}
+        plain = _plain_strategy(h) if h else "—"
+        sh = f' · araştırma Sharpe {sharpe:.2f}' if sharpe is not None else ""
+        if dec == "accept":
+            reason = "Tüm süzgeçlerden geçti (sızıntı, performans, sağlamlık)."
+        else:
+            reason = _humanize_issue(issues)
+        cards.append(f"""<div class="detail">
+  <div class="dh"><span class="did">{_esc(hid)}</span> {_esc(title or '')}
+    <span style="float:right">{_pill(dec)}</span></div>
+  <div class="drow"><b>Aile:</b> {_esc(family or '—')}{_esc(sh)}</div>
+  <div class="drow"><b>Ne yapıyor:</b> {plain}</div>
+  <div class="drow"><b>Sonuç / neden:</b> {_esc(reason)}</div>
 </div>""")
     return "".join(cards)
 
@@ -321,6 +478,12 @@ def generate_dashboard(memory_db: str, holdout_db: str, out_path: str,
                  "orada durur. Kırmızı = elendi, mavi = tekrar, yeşil = kabul. "
                  "Sağdaki sayı o aşamada sonlanan hipotez adedidir.",
                  _funnel(conn)),
+        _section("Tüm Denenen Hipotezler — LLM Ne Denedi, Ne Oldu, Niçin?",
+                 "Kampanyanın asıl hikâyesi. LLM'in ürettiği her hipotez düz Türkçe "
+                 "olarak ne yaptığıyla birlikte listelenir; yanında sonucu (KABUL / RED "
+                 "/ TEKRAR) ve — reddedildiyse — insan diliyle nedeni yazar. Kabul "
+                 "çıkmasa bile sistemin neyi neden elediği buradan net görülür.",
+                 _all_hypotheses(conn)),
         _section("En İyi Stratejiler",
                  "Tüm süzgeçlerden geçip kabul edilen stratejiler, araştırma dönemi "
                  "Sharpe oranına göre sıralı.",

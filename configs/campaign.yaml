@@ -3,12 +3,12 @@
 # deney + token bütçesi, risk kısıtları, holdout erişimi. Buradaki her alan kodda
 # gerçekten kullanılır (dekoratif değil).
 campaign:
-  name: sp500_daily_alpha_v1
-  universe: sp500_point_in_time
-  universe_description: "20 ABD hissesi, günlük bar, point-in-time (sentetik momentum)"
+  name: us_largecap_daily_alpha_v1
+  universe: us_largecap_liquid
+  universe_description: "50 büyük/likit ABD hissesi (teknoloji, finans, sağlık, tüketim, enerji sektörlerinden; AAPL, MSFT, JPM, XOM, UNH, LLY vb.), günlük OHLCV bar, Yahoo Finance, 2015-2023"
   goal: "Kesitsel günlük long-short alpha ara"
-  start_date: 2015-01-01           # araştırma+holdout kapsayan tam aralık
-  end_date: 2020-12-31
+  start_date: 2015-01-01           # araştırma+holdout kapsayan tam aralık (gerçek veri)
+  end_date: 2023-12-31
 
   # --- İzin verilen strateji uzayı (Campaign Manager kısıtları) ---
   allowed_fields:                  # LLM yalnızca bu veri alanlarını kullanabilir

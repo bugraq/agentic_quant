@@ -1,7 +1,7 @@
 # Veri kaynağı — TAK-ÇALIŞTIR (sentetik <-> gerçek). Kod değişmez.
 # (research/holdout bölme oranı campaign.yaml -> holdout_policy.research_fraction'da.)
 data:
-  source: synthetic          # synthetic | yfinance
+  source: yfinance           # synthetic | yfinance  — GERÇEK piyasa verisi (Yahoo Finance)
 
   synthetic:
     kind: momentum           # momentum | reversal | random
@@ -12,9 +12,14 @@ data:
   # Gerçek veriye geçmek için source: yfinance yap.
   # UYARI: yfinance sabit ticker listesiyle survivorship bias taşır (Doküman 7).
   # Gerçek point-in-time için tarihsel endeks üyeliği + delisting returns gerekir.
+  # ~50 likit ABD hissesi (hepsi 2015'ten önce halka açık). Kesitsel long-short
+  # için 20 isim çok azdı (dispersiyon düşük); daha geniş evren daha gerçekçi.
   yfinance:
     tickers: [AAPL, MSFT, GOOGL, AMZN, META, NVDA, TSLA, JPM, JNJ, V,
-              PG, HD, MA, XOM, BAC, KO, PFE, CSCO, INTC, WMT]
+              PG, HD, MA, XOM, BAC, KO, PFE, CSCO, INTC, WMT,
+              DIS, NFLX, ADBE, CRM, CMCSA, PEP, ABT, TMO, COST, AVGO,
+              TXN, QCOM, ORCL, IBM, MCD, NKE, WFC, GS, MS, C,
+              CAT, BA, MMM, HON, UNH, CVX, MRK, LLY, ABBV, AMD]
     # Tarih aralığı campaign.yaml -> start_date/end_date'ten gelir (tek kaynak).
 
   # İleride: kripto (ccxt) — 7/24, funding rate, ölü coin survivorship'i
