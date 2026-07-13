@@ -98,6 +98,12 @@ KRİTİK KURALLAR (yoksa hipotez reddedilir):
   - volatility, rolling_std, zscore, return vb. OPERATÖRDÜR — veri alanı DEĞİL.
     Girdi olarak bir alan alırlar: {{"op":"volatility","window":20,"inputs":[
     {{"op":"field","field":"close"}}]}}. 'volatility'yi field olarak KULLANMA.
+  - BİRİM UYARISI (ölü koşul tuzağı): rolling_std(close) FİYAT ölçeğindedir
+    (dolar; büyük hissede onlarca dolar) — onu 0.02 gibi getiri-ölçeğinde bir
+    sabitle karşılaştırırsan koşul HİÇ tetiklenmez ve hipotez reddedilir.
+    Volatilite eşiği için volatility operatörünü (getiri bazlı) kullan; daha da
+    iyisi sabit eşik yerine KESİTSEL karşılaştırma kur (örn. quantile/
+    cross_sectional_rank ile "evrenin medyanından yüksek volatilite").
   - conditional TAM 3 girdi alır ve sırası şudur: [koşul, koşul-doğruysa-değer,
     koşul-yanlışsa-değer]. Örn. yüksek volatilitede reversal, düşükte momentum:
     {{"op":"conditional","inputs":[
@@ -160,6 +166,16 @@ denenmemiş bir yön keşfet. ZAYIF aileleri (dersteki uyarılar) tekrarlama."""
     lit_block = (f"\nLİTERATÜR (web'den gerçek faktörler — bunlardan İLHAM al, "
                  f"DSL ile uygula):\n{literature}\n" if literature else "")
 
+    # Duplicate geri bildirimi: bu slotta üretilenler tekrar çıktı; LLM'in
+    # AYNI yapıyı bir kez daha döndürmesini açıkça yasakla.
+    dup_block = ""
+    if ctx.duplicate_feedback:
+        dups = "\n".join(f"  - {d}" for d in ctx.duplicate_feedback)
+        dup_block = (f"\n⚠ BU TURDA ÜRETTİKLERİN TEKRAR ÇIKTI (kabul edilmedi):\n{dups}\n"
+                     f"Bunlarla ve önceki denemelerle YAPISAL olarak farklı bir strateji "
+                     f"üret: farklı operatör kombinasyonu, farklı veri alanı veya farklı "
+                     f"aile dene. Sadece pencere/başlık değiştirmek YETMEZ.\n")
+
     return f"""Kampanya hedefi: {ctx.campaign_goal}
 Evren: {ctx.universe_description}
 Üretim modu: {ctx.generation_mode.value}
@@ -169,7 +185,7 @@ DERSLER (geçmiş deneylerden — bunlara UY):
 
 Daha önce denenen hipotezler (aynısını tekrarlama):
 {priors}
-
+{dup_block}
 {task}
 
 Yukarıdaki şemaya uygun, geçerli bir hipotez JSON'u üret."""

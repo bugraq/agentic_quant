@@ -30,6 +30,8 @@ from evaluation.robustness import run_robustness
 from optimization import n_window_slots, optimize_parameters
 
 EXPLORE_ROUNDS = 3   # ilk turlar: keşif (sıfırdan yeni). Sonra: champion'ı geliştir.
+MAX_DUP_RETRIES = 2  # slot başına: duplicate çıkarsa geri bildirimle yeniden üretim hakkı
+LIVENESS_MIN = 0.02  # conditional koşulu bu orandan az/1-bu orandan çok tetikleniyorsa ÖLÜ
 
 # Üretim modu -> lineage relation_type (Doküman 13)
 _RELATION = {
@@ -43,6 +45,7 @@ STAGE_COMPILE_ERROR = "compile_error"
 STAGE_STATIC_REJECTED = "static_rejected"
 STAGE_CRITIC_REJECTED = "critic_rejected"
 STAGE_DUPLICATE = "duplicate"
+STAGE_DEGENERATE = "degenerate_conditional"
 STAGE_GATE_REJECTED = "gate_rejected"
 STAGE_ROBUSTNESS_REJECTED = "robustness_rejected"
 STAGE_ACCEPTED = "accepted"
@@ -126,7 +129,8 @@ def _decide_mode(iteration: int, memory: MemoryStore):
 def _build_context(cfg: CampaignConfig, memory: MemoryStore, remaining: int,
                    mode: GenerationMode, parent: HypothesisSpec | None,
                    suggested_family: str | None = None,
-                   literature: list[str] | None = None) -> ResearchContext:
+                   literature: list[str] | None = None,
+                   duplicate_feedback: list[str] | None = None) -> ResearchContext:
     priors = [
         ExperimentSummary(hypothesis_id=h, title=t, family=f, outcome=d,
                           headline_metric=(f"Sharpe {s:.2f}" if s is not None else None))
@@ -150,6 +154,7 @@ def _build_context(cfg: CampaignConfig, memory: MemoryStore, remaining: int,
         suggested_family=suggested_family,
         literature_mechanisms=literature or [],
         experiments_remaining=remaining,
+        duplicate_feedback=duplicate_feedback or [],
     )
 
 
@@ -176,6 +181,7 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
         print(f"[devam] {start} önceki deney hafızada; novelty {seeded} sinyalle kuruldu.\n")
 
     bandit = ThompsonBandit([f.value for f in HypothesisFamily], seed=0)
+    consecutive_dup_slots = 0   # üst üste duplicate ile biten slot sayısı (adaptif mod)
     for i in range(cfg.max_experiments):
         # Token bütçesi kontrolü (Campaign Manager) — aşılınca kampanya durur
         used = (getattr(provider, "total_prompt_tokens", 0)
@@ -186,83 +192,134 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
             break
         remaining = cfg.max_experiments - i
         mode, parent, champ_sharpe = _decide_mode(i, memory)
+        # ADAPTİF MOD (revision kara deliği önlemi): üst üste 2+ slot duplicate
+        # ile bittiyse champion/inversion etrafında dönmeyi bırak, keşfe zorla
+        # (gerçek koşuda görüldü: 24 slotun 10'u champion revizyonu duplicate'iydi).
+        if consecutive_dup_slots >= 2 and mode != GenerationMode.new:
+            print(f"    (adaptif: üst üste {consecutive_dup_slots} duplicate slot — "
+                  f"{mode.value} bırakıldı, keşif moduna geçildi)")
+            mode, parent = GenerationMode.new, None
         # Yeni hipotez modunda bandit aile seçer (bütçe tahsisi); revision'da champion'ın ailesi
         suggested = bandit.select(memory.family_outcome_counts()) \
             if mode == GenerationMode.new else None
-        ctx = _build_context(cfg, memory, remaining, mode, parent, suggested, literature)
-
-        # 0) Hipotez üret — LLM geçerli çıktı veremezse turu atla (kampanya çökmesin)
-        try:
-            hyp = provider.next(ctx)
-        except Exception as e:  # noqa: BLE001 — sağlayıcıya özgü hatalar dahil
-            print(f"[{i+1}/{cfg.max_experiments}] ÜRETİM HATASI (atlandı): "
-                  f"{type(e).__name__}: {str(e)[:160]}")
-            continue
-        mode_tag = mode.value + (f"<-{parent.hypothesis_id}" if parent else "")
-        tag = f"[{i+1}/{cfg.max_experiments}] ({mode_tag}) {hyp.hypothesis_id} {hyp.title}"
 
         # Reproducibility (17.3) + lineage (13): her kayda eklenecek ortak metadata
         parent_id = parent.hypothesis_id if parent else None
         relation = _RELATION.get(mode)
-        meta = dict(llm_meta=getattr(provider, "last_meta", None),
-                    parent_hypothesis_id=parent_id, relation_type=relation)
         _mrec = memory.record
 
-        def rec(h, d, s, result=None):
-            return _mrec(h, d, s, result=result, **meta)
+        # --- 0-3b) Üretim + ön elemeler. DUPLICATE çıkarsa slot yakılmaz:
+        # LLM'e "şunlar zaten denendi" geri bildirimiyle en fazla MAX_DUP_RETRIES
+        # yeniden üretim şansı verilir (Doküman 14 — tekrar bütçeyi yemesin).
+        # Duplicate DIŞI her sonuç (derleme/statik/critic/ölü-koşul) slotu bitirir.
+        dup_feedback: list[str] = []
+        signal = None
+        slot_was_duplicate = False
+        proceed = False   # backtest'e ulaşıldı mı
 
-        # 1) Derle (yapısal hatalar burada)
-        try:
-            graph = compile_hypothesis(hyp)
-        except CompileError as e:
-            dec = Decision(hypothesis_id=hyp.hypothesis_id, decision=DecisionType.reject,
-                           source=DecisionSource.gate, severity=Severity.high,
-                           issues=[Issue(type="compile_error", description=str(e))])
-            rec(hyp, dec, STAGE_COMPILE_ERROR)
-            print(f"{tag} -> REDDEDİLDİ (derleme): {e}")
-            continue
+        for attempt in range(1 + MAX_DUP_RETRIES):
+            ctx = _build_context(cfg, memory, remaining, mode, parent, suggested,
+                                 literature, duplicate_feedback=dup_feedback)
+            # 0) Hipotez üret — LLM geçerli çıktı veremezse slotu atla
+            try:
+                hyp = provider.next(ctx)
+            except Exception as e:  # noqa: BLE001 — sağlayıcıya özgü hatalar dahil
+                print(f"[{i+1}/{cfg.max_experiments}] ÜRETİM HATASI (atlandı): "
+                      f"{type(e).__name__}: {str(e)[:160]}")
+                break
+            mode_tag = mode.value + (f"<-{parent.hypothesis_id}" if parent else "")
+            retry_tag = f" [tekrar {attempt}]" if attempt else ""
+            tag = (f"[{i+1}/{cfg.max_experiments}] ({mode_tag}){retry_tag} "
+                   f"{hyp.hypothesis_id} {hyp.title}")
+            meta = dict(llm_meta=getattr(provider, "last_meta", None),
+                        parent_hypothesis_id=parent_id, relation_type=relation)
 
-        # 2) Statik doğrula (SIZINTI + izin verilen alan/rebalance/portföy kontrolü)
-        static = validate(graph, hyp, allowed_fields=cfg.allowed_fields or None,
-                          allowed_rebalance=cfg.allowed_rebalance or None,
-                          allowed_portfolio_types=cfg.portfolio_types or None)
-        if static.decision != DecisionType.accept:
-            rec(hyp, static, STAGE_STATIC_REJECTED)
-            reason = static.issues[0].type if static.issues else "?"
-            print(f"{tag} -> {static.decision.value.upper()} (statik): {reason}")
-            continue
+            def rec(h, d, s, result=None, _m=meta):
+                return _mrec(h, d, s, result=result, **_m)
 
-        # 3a) Yapısal yenilik kontrolü (backtest'ten ÖNCE — bütçe korur).
-        # INVERSION modunda ATLANIR: yapısal imza (operatör çok-kümesi) işareti
-        # ayırt edemez — büyük bir ağaca negate eklemek Jaccard'ı ~aynı bırakır.
-        # "Tersini dene" deyip tersini yapısal-duplicate saymak çelişkiydi
-        # (gerçek koşuda 2/8 deney böyle çöpe gitti). Tembel/sahte inversion'ı
-        # (gerçekte ters çevrilmemiş kopya) 3b'deki İŞARETLİ davranışsal kontrol
-        # yine yakalar: corr>+0.95 duplicate, corr≈-1 yeni bahis (serbest).
-        if mode != GenerationMode.inversion:
-            dup = novelty.check_structural(hyp)
+            # 1) Derle (yapısal hatalar burada)
+            try:
+                graph = compile_hypothesis(hyp)
+            except CompileError as e:
+                dec = Decision(hypothesis_id=hyp.hypothesis_id, decision=DecisionType.reject,
+                               source=DecisionSource.gate, severity=Severity.high,
+                               issues=[Issue(type="compile_error", description=str(e))])
+                rec(hyp, dec, STAGE_COMPILE_ERROR)
+                print(f"{tag} -> REDDEDİLDİ (derleme): {e}")
+                break
+
+            # 2) Statik doğrula (SIZINTI + izin verilen alan/rebalance/portföy kontrolü)
+            static = validate(graph, hyp, allowed_fields=cfg.allowed_fields or None,
+                              allowed_rebalance=cfg.allowed_rebalance or None,
+                              allowed_portfolio_types=cfg.portfolio_types or None)
+            if static.decision != DecisionType.accept:
+                rec(hyp, static, STAGE_STATIC_REJECTED)
+                reason = static.issues[0].type if static.issues else "?"
+                print(f"{tag} -> {static.decision.value.upper()} (statik): {reason}")
+                break
+
+            # 3a) Yapısal yenilik kontrolü (backtest'ten ÖNCE — bütçe korur).
+            # INVERSION modunda ATLANIR: yapısal imza (operatör çok-kümesi) işareti
+            # ayırt edemez — büyük ağaca negate eklemek Jaccard'ı ~aynı bırakır.
+            # Tembel/sahte inversion'ı 3b'deki İŞARETLİ davranışsal kontrol yakalar.
+            if mode != GenerationMode.inversion:
+                dup = novelty.check_structural(hyp)
+                if dup:
+                    rec(hyp, _duplicate_decision(hyp, dup, "yapısal"), STAGE_DUPLICATE)
+                    print(f"{tag} -> DUPLICATE (yapısal, ~{dup}) — yeniden üretim istenecek")
+                    dup_feedback.append(f"{hyp.title} (~{dup} ile aynı yapı)")
+                    slot_was_duplicate = True
+                    continue
+
+            # 3a2) Quant Critic — BAĞIMSIZ ekonomik inceleme (backtest'ten önce)
+            try:
+                crit = critic.review(hyp)
+            except Exception:  # noqa: BLE001 — eleştirmen hatası araştırmayı bloklamasın
+                crit = None
+            if crit is not None and crit.decision != DecisionType.accept:
+                rec(hyp, crit, STAGE_CRITIC_REJECTED)
+                reason = crit.issues[0].type if crit.issues else "?"
+                print(f"{tag} -> {crit.decision.value.upper()} (critic): {reason}")
+                break
+
+            # 3b) Sinyali hesapla + KOŞUL-CANLILIK + davranışsal yenilik kontrolü
+            liveness: list[tuple[str, float]] = []
+            signal = evaluate_signal(graph, data, liveness_out=liveness)
+            dead = [(nid, f) for nid, f in liveness
+                    if f < LIVENESS_MIN or f > 1.0 - LIVENESS_MIN]
+            if dead:
+                nid, frac = dead[0]
+                dec = Decision(
+                    hypothesis_id=hyp.hypothesis_id, decision=DecisionType.revise,
+                    source=DecisionSource.gate, severity=Severity.medium,
+                    issues=[Issue(
+                        type="dead_conditional",
+                        description=(f"Koşul ({nid}) hücrelerin %{frac*100:.1f}'inde "
+                                     f"tetikleniyor — rejim koşullaması FİİLEN ölü, "
+                                     f"strateji tek dalı (muhtemel birim hatası: "
+                                     f"fiyat-ölçeği vs getiri-ölçeği eşiği)."),
+                        required_action="Koşulu gerçekten ayrıştıran bir eşik kur "
+                                        "(örn. volatility operatörü + kesitsel karşılaştırma).")])
+                rec(hyp, dec, STAGE_DEGENERATE)
+                print(f"{tag} -> REVISE (ölü koşul: %{frac*100:.1f} tetiklenme)")
+                signal = None
+                break
+            dup = novelty.check_behavioral(signal)
             if dup:
-                rec(hyp, _duplicate_decision(hyp, dup, "yapısal"), STAGE_DUPLICATE)
-                print(f"{tag} -> DUPLICATE (yapısal, ~{dup}) — backtest atlandı")
+                rec(hyp, _duplicate_decision(hyp, dup, "davranışsal"), STAGE_DUPLICATE)
+                print(f"{tag} -> DUPLICATE (davranışsal, ~{dup}) — yeniden üretim istenecek")
+                dup_feedback.append(f"{hyp.title} (~{dup} ile aynı sinyal)")
+                slot_was_duplicate = True
+                signal = None
                 continue
 
-        # 3a2) Quant Critic — BAĞIMSIZ ekonomik inceleme (backtest'ten önce, bütçe korur)
-        try:
-            crit = critic.review(hyp)
-        except Exception:  # noqa: BLE001 — eleştirmen hatası araştırmayı bloklamasın
-            crit = None
-        if crit is not None and crit.decision != DecisionType.accept:
-            rec(hyp, crit, STAGE_CRITIC_REJECTED)
-            reason = crit.issues[0].type if crit.issues else "?"
-            print(f"{tag} -> {crit.decision.value.upper()} (critic): {reason}")
-            continue
+            # Bütün ön elemeler geçildi -> backtest
+            slot_was_duplicate = False
+            proceed = True
+            break
 
-        # 3b) Sinyali hesapla, davranışsal yenilik kontrolü (korelasyon)
-        signal = evaluate_signal(graph, data)
-        dup = novelty.check_behavioral(signal)
-        if dup:
-            rec(hyp, _duplicate_decision(hyp, dup, "davranışsal"), STAGE_DUPLICATE)
-            print(f"{tag} -> DUPLICATE (davranışsal, ~{dup})")
+        consecutive_dup_slots = consecutive_dup_slots + 1 if slot_was_duplicate else 0
+        if not proceed:
             continue
 
         # 3c) Walk-forward backtest (çoklu fold, önceden hesaplanan sinyalle)

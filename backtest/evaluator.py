@@ -121,12 +121,35 @@ def _eval_node(node: GraphNode, vals: dict[str, Value], data: MarketData) -> Val
     raise NotImplementedError(f"Evaluator'da uygulanmamış operatör: {op}")
 
 
-def evaluate_signal(graph: StrategyGraph, data: MarketData) -> pd.DataFrame:
-    """Graph'ı çalıştır, sinyal düğümünün panelini döndür."""
+def evaluate_signal(graph: StrategyGraph, data: MarketData,
+                    liveness_out: "list[tuple[str, float]] | None" = None) -> pd.DataFrame:
+    """Graph'ı çalıştır, sinyal düğümünün panelini döndür.
+
+    liveness_out verilirse her conditional için (node_id, tetiklenme_oranı)
+    eklenir — KOŞUL-CANLILIK teşhisi. Koşul neredeyse hiç (veya hep)
+    tetikleniyorsa 'rejim koşullaması' etiketi sahtedir: strateji fiilen tek
+    dalıdır (gerçek koşuda görüldü: rolling_std(close,10) < 0.02 fiyat/getiri
+    birim hatası yüzünden %0.25 tetikleniyordu; 'low-vol momentum' diye kabul
+    edilen şey saf reversal çıktı).
+    """
     vals: dict[str, Value] = {}
     for node in graph.nodes:
         vals[node.node_id] = _eval_node(node, vals, data)
     signal = vals[graph.signal_node_id]
     if not isinstance(signal, pd.DataFrame):
         raise ValueError("Sinyal skaler çıktı verdi; kesitsel bir panel bekleniyordu.")
-    return signal.replace([np.inf, -np.inf], np.nan)
+    signal = signal.replace([np.inf, -np.inf], np.nan)
+
+    if liveness_out is not None:
+        valid = signal.notna()
+        for node in graph.nodes:
+            if node.op != "conditional" or not node.input_ids:
+                continue
+            cond = vals[node.input_ids[0]]
+            if isinstance(cond, pd.DataFrame):
+                # Yalnızca sinyalin tanımlı olduğu hücrelerde ölç (warmup hariç)
+                frac = float(cond.where(valid).stack().mean()) if valid.any().any() else 0.0
+            else:
+                frac = 1.0 if cond else 0.0   # derleme-sabiti koşul: kesin ölü
+            liveness_out.append((node.node_id, frac))
+    return signal

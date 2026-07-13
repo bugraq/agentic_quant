@@ -172,7 +172,8 @@ def _multiple_testing(memory_db: str) -> str:
         fdr = ('<span class="pill good">GEÇTİ</span>' if r.survives_fdr
                else '<span class="pill muted">geçmedi</span>')
         dsr = f"{r.dsr:.2f}" + (" ★" if r.dsr > 0.95 else "")
-        body += (f"<tr><td>{_esc(r.hypothesis_id)}</td>"
+        copy_tag = f" ×{r.n_copies}" if r.n_copies > 1 else ""
+        body += (f"<tr><td>{_esc(r.hypothesis_id)}{_esc(copy_tag)}</td>"
                  f'<td class="num">{r.ann_sharpe:.2f}</td>'
                  f'<td class="num">{r.raw_p:.3f}</td><td class="num">{dsr}</td>'
                  f'<td class="num">[{r.ci_low:.2f}, {r.ci_high:.2f}]</td>'
@@ -182,7 +183,8 @@ def _multiple_testing(memory_db: str) -> str:
             + body + "</table></div>"
             '<div class="desc" style="margin-top:8px">★ = DSR &gt; 0.95: deneme sayısı '
             'düzeltildikten sonra bile anlamlı. Güven aralığı sıfırı içeriyorsa sonuç '
-            'kesin değildir.</div>')
+            'kesin değildir. ×N = N deneme birebir aynı getiriyi üretti (ölü parametre: '
+            'o pencere stratejiyi etkilemiyor).</div>')
 
 
 def _pareto(memory_db: str) -> str:
@@ -397,7 +399,8 @@ def _all_hypotheses(conn) -> str:
     çıkmasa bile (gerçek veride sık olur) sistemin ne yaptığı buradan anlaşılır.
     """
     rows = _q(conn, """SELECT hypothesis_id, title, family, decision, sharpe,
-                              hypothesis_json, issues_json
+                              hypothesis_json, issues_json, stage,
+                              parent_hypothesis_id
                        FROM experiment ORDER BY id""")
     if not rows:
         return '<div class="card desc">Henüz hipotez üretilmedi.</div>'
@@ -409,8 +412,19 @@ def _all_hypotheses(conn) -> str:
             return '<span class="pill muted">TEKRAR</span>'
         return '<span class="pill bad">RED</span>'
 
+    # Parametre-arama denemeleri LLM hipotezi DEĞİL, optimizer'ın pencere
+    # varyantları — detay listesini boğmasınlar; parent başına TEK satıra katla.
+    # (Çoklu-test sayımında yine tam olarak yer alırlar.)
+    param_counts: dict = {}
+    main_rows = []
+    for r in rows:
+        if r[7] == "parameter_search":
+            param_counts[r[8] or "?"] = param_counts.get(r[8] or "?", 0) + 1
+        else:
+            main_rows.append(r)
+
     cards = []
-    for hid, title, family, dec, sharpe, hj, issues in rows:
+    for hid, title, family, dec, sharpe, hj, issues, _stage, _parent in main_rows:
         h = json.loads(hj) if hj else {}
         plain = _plain_strategy(h) if h else "—"
         sh = f' · araştırma Sharpe {sharpe:.2f}' if sharpe is not None else ""
@@ -418,12 +432,18 @@ def _all_hypotheses(conn) -> str:
             reason = "Tüm süzgeçlerden geçti (sızıntı, performans, sağlamlık)."
         else:
             reason = _humanize_issue(issues)
+        extra = ""
+        if hid in param_counts:
+            extra = (f'<div class="drow"><b>Parametre araması:</b> optimizer bu '
+                     f'hipotezin pencerelerinde {param_counts[hid]} varyant denedi '
+                     f'(hepsi çoklu-test sayımında).</div>')
         cards.append(f"""<div class="detail">
   <div class="dh"><span class="did">{_esc(hid)}</span> {_esc(title or '')}
     <span style="float:right">{_pill(dec)}</span></div>
   <div class="drow"><b>Aile:</b> {_esc(family or '—')}{_esc(sh)}</div>
   <div class="drow"><b>Ne yapıyor:</b> {plain}</div>
   <div class="drow"><b>Sonuç / neden:</b> {_esc(reason)}</div>
+  {extra}
 </div>""")
     return "".join(cards)
 

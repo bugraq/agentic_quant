@@ -72,6 +72,10 @@ class ResearchContext(BaseModel):
     generation_mode: GenerationMode = GenerationMode.new
     parent_hypothesis: Optional[HypothesisSpec] = None   # revision/combination için
     critic_feedback: Optional[Decision] = None            # "şunu düzelt"
+    duplicate_feedback: list[str] = Field(
+        default_factory=list,
+        description="Bu turda duplicate çıkan üretimlerin başlıkları — LLM'e "
+                    "'bunları zaten denedin, yapısal olarak farklısını üret' demek için")
 
     # Bütçe bilgisi
     experiments_remaining: Optional[int] = None
