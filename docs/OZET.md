@@ -55,9 +55,18 @@ sağlam olduğunun kanıtıdır.
 
 ## Modülerlik (pipeline önce, model tak-çalıştır)
 Her şey config'ten sürülür, kod değişmez:
-- **LLM sağlayıcısı** — `configs/models.yaml` (OpenRouter bugün, vLLM yarın; aynı kod)
-- **Veri kaynağı** — `configs/data.yaml` (sentetik ↔ gerçek yfinance)
+- **LLM sağlayıcısı** — `configs/models.yaml` (OpenRouter bugün, vLLM yarın; aynı kod;
+  `provider: random` = LLM'siz random-search baseline, Deney A)
+- **Veri kaynağı** — `configs/data.yaml` (sentetik ↔ yfinance ↔ **point-in-time S&P 500**)
 - **Kampanya sınırları** — `configs/campaign.yaml` (bütçe, eşikler, operatörler)
+
+## Survivorship düzeltmesi (point-in-time evren)
+Bugünün endeks listesini geçmişe uygulamak, "kazananlarla backtest" demektir.
+Sistem artık Wikipedia'nın S&P 500 değişiklik tarihçesinden **her tarihteki
+gerçek üye kümesini** kurar (2015-2023 penceresinde ~700 farklı ticker; bugün
+endekste olmayan ~150 isim dahil) ve bir hisse yalnızca **o tarihte üyeyken**
+işlem görebilir. Kalan dürüst sınırlar belgelidir: Yahoo'da verisi hiç olmayan
+delist ticker'lar yüklemede raporlanır; delisting return modellenmez (CRSP yok).
 
 ## Teknik durum
 - ~30 modül, **11 test paketi** (sızıntı, backtest, istatistik, holdout, critic,
@@ -85,6 +94,8 @@ OPENROUTER_API_KEY=sk-or-...
 ```
 .\.venv\Scripts\python.exe main.py
 ```
+İlk çalıştırma point-in-time S&P 500 verisini indirir (~700 ticker, birkaç
+dakika); sonraki koşular `data/` altındaki cache'ten saniyeler içinde açılır.
 Terminalde her hipotezin kararını, leaderboard'u, multiple-testing raporunu ve
 holdout sonuçlarını görürsün.
 

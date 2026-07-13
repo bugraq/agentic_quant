@@ -10,5 +10,7 @@ pandas>=2.0
 openai>=1.0
 python-dotenv>=1.0
 
-# Gerçek veri (opsiyonel — data.yaml source: yfinance)
+# Gerçek veri (opsiyonel — data.yaml source: yfinance | sp500_pit)
 yfinance>=0.2
+lxml>=5.0          # Wikipedia point-in-time üyelik tablosu parse (pandas.read_html)
+requests>=2.31     # Wikipedia fetch (uygun User-Agent ile)

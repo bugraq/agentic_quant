@@ -80,6 +80,11 @@ def _universe_mask(hyp: HypothesisSpec, data: MarketData, signal):
     """
     u = hyp.universe
     mask = signal.notna()
+    # ★ Point-in-time endeks üyeliği (survivorship düzeltmesi): hisse yalnızca
+    # O TARİHTE endekstyken işlem görebilir. Bugünün listesini geçmişe uygulamak
+    # yasak (Doküman 4/7); membership alanı varsa koşulsuz uygulanır.
+    if "index_membership" in data.fields:
+        mask &= (data.get("index_membership") > 0)
     if u.minimum_price is not None:
         mask &= (data.get("close") >= u.minimum_price)
     if u.minimum_median_dollar_volume is not None:
@@ -132,7 +137,9 @@ def compute_pnl(signal, hyp: HypothesisSpec, data: MarketData, cost_bps: float):
     trade_tick = parse_time_token(hyp.execution.trade_time)
     bar_offset = trade_tick // 2                       # open_t_plus_1 -> 1
     phase = "open" if trade_tick % 2 == 0 else "close"
-    exec_ret = _execution_prices(data, phase).pct_change()
+    # fill_method=None: delist/eksik veri boşluğu getiriyi NaN bırakır (pad ile
+    # sahte 0-getiri üretmez); NaN'lar pnl toplamında zaten atlanır.
+    exec_ret = _execution_prices(data, phase).pct_change(fill_method=None)
 
     gross_pnl = (weights.shift(bar_offset + 1) * exec_ret).sum(axis=1)
     turnover_t = (weights - weights.shift(1)).abs().sum(axis=1)

@@ -95,10 +95,11 @@ def main() -> None:
     # Veri: adaptörden (sentetik/gerçek config'ten) yüklenir, sonra araştırma /
     # KİLİTLİ holdout olarak bölünür. Kampanya yalnızca araştırma verisini görür.
     # Tarih aralığı tek kaynak: campaign.yaml (yfinance adaptörüne enjekte edilir).
-    if data_cfg.get("source") == "yfinance":
-        data_cfg.setdefault("yfinance", {})
-        data_cfg["yfinance"]["start"] = str(campaign["start_date"])
-        data_cfg["yfinance"]["end"] = str(campaign["end_date"])
+    src = data_cfg.get("source")
+    if src in ("yfinance", "sp500_pit"):
+        data_cfg.setdefault(src, {})
+        data_cfg[src]["start"] = str(campaign["start_date"])
+        data_cfg[src]["end"] = str(campaign["end_date"])
     adapter = make_adapter(data_cfg)
     full = adapter.load()
     data, holdout_data = split_by_fraction(full, cfg.research_fraction)

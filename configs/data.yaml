@@ -1,7 +1,16 @@
 # Veri kaynağı — TAK-ÇALIŞTIR (sentetik <-> gerçek). Kod değişmez.
 # (research/holdout bölme oranı campaign.yaml -> holdout_policy.research_fraction'da.)
 data:
-  source: yfinance           # synthetic | yfinance  — GERÇEK piyasa verisi (Yahoo Finance)
+  source: sp500_pit          # synthetic | yfinance | sp500_pit
+
+  # POINT-IN-TIME S&P 500 (survivorship DÜZELTMESİ, Doküman 4/7):
+  # Wikipedia değişiklik tarihçesinden her tarihteki gerçek üye kümesi kurulur;
+  # pencerede bir gün bile üye olmuş HER ticker (bugün endekste olmayanlar
+  # dahil, ~700 isim) indirilir ve hisse yalnızca üye olduğu günlerde işlem
+  # görür. İlk yükleme uzun sürer (~700 ticker), sonrası cache'ten (data/*.pkl).
+  # Tarih aralığı campaign.yaml'dan enjekte edilir (tek kaynak).
+  sp500_pit:
+    cache_dir: data
 
   synthetic:
     kind: momentum           # momentum | reversal | random

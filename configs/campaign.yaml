@@ -4,8 +4,8 @@
 # gerçekten kullanılır (dekoratif değil).
 campaign:
   name: us_largecap_daily_alpha_v1
-  universe: us_largecap_liquid
-  universe_description: "50 büyük/likit ABD hissesi (teknoloji, finans, sağlık, tüketim, enerji sektörlerinden; AAPL, MSFT, JPM, XOM, UNH, LLY vb.), günlük OHLCV bar, Yahoo Finance, 2015-2023"
+  universe: sp500_point_in_time
+  universe_description: "Point-in-time S&P 500: her tarihte GERÇEK endeks üyeleri (~500 isim/gün, pencere boyunca ~700 farklı ticker; bugün endekste olmayanlar dahil), günlük OHLCV bar, Yahoo Finance, 2015-2023"
   goal: "Kesitsel günlük long-short alpha ara"
   start_date: 2015-01-01           # araştırma+holdout kapsayan tam aralık (gerçek veri)
   end_date: 2023-12-31

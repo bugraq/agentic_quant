@@ -63,7 +63,7 @@ def _eval_node(node: GraphNode, vals: dict[str, Value], data: MarketData) -> Val
         m, s = x.rolling(w).mean(), x.rolling(w).std()
         return (x - m) / s
     if op == "volatility":
-        return x.pct_change().rolling(w).std()
+        return x.pct_change(fill_method=None).rolling(w).std()
     if op == "correlation":
         return ins[0].rolling(w).corr(ins[1])
     if op == "residual_return":

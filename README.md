@@ -75,7 +75,13 @@ tek tek `dummy → gerçek` yap. Baştan gerçek yapılacak iki şey:
   gitmez (parametre-içi look-ahead kontrolü); `false` = ablation deneyi
 - [x] Random-search baseline (Deney A) — `models.yaml -> provider: random`; aynı
   pipeline, aynı bütçe, ekonomik gerekçe yok; LLM'in katkısı ölçülebilir
-- [ ] Kripto adaptörü (ccxt), point-in-time endeks üyeliği, delisting
+- [x] Point-in-time S&P 500 evreni (survivorship düzeltmesi) — Wikipedia değişiklik
+  tarihçesinden her tarihteki GERÇEK üye kümesi (`data/pit_universe.py`); pencerede
+  üye olmuş ~700 ticker (bugün endekste olmayanlar dahil) indirilir; motor
+  `index_membership` maskesiyle hisseyi yalnızca üye olduğu günlerde işleme sokar.
+  Kalan dürüst sınırlar: Yahoo'da verisi hiç olmayan delist ticker'lar (yüklemede
+  raporlanır) ve delisting return modeli yok — tam çözüm CRSP ister.
+- [ ] Kripto adaptörü (ccxt)
 - [ ] (opsiyonel) lineage grafiği görselleştirmesi
 
 `main.py` çalışınca `dashboard.html` üretilir (offline, tarayıcıda aç). Ayrıca:
