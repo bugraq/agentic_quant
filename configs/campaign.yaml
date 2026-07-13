@@ -6,12 +6,26 @@ campaign:
   goal: "Kesitsel günlük long-short alpha ara"
 
   allowed_operators:
+    # temel
     - return
     - rolling_mean
+    - rolling_std
     - cross_sectional_rank
     - negate
     - zscore
+    - delta
+    - ewma
+    - volatility
     - neutralize_sector
+    - winsorize
+    - normalize
+    - demean
+    # koşullama / rejim (bunlar olmadan 'regime-conditioned' yazılamaz)
+    - conditional
+    - greater_than
+    - less_than
+    - multiply
+    - subtract
 
   maximum_experiments: 8
   cost_bps: 5.0

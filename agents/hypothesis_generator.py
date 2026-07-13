@@ -78,6 +78,10 @@ KRİTİK KURALLAR (yoksa hipotez reddedilir):
   - falsification.minimum_oos_sharpe gerçekçi olsun (0.3–0.8 arası).
   - TURNOVER KONTROLÜ: aşırı sık işlemden kaçın; çok kısa pencereler (1–3 gün)
     turnover'ı patlatır. Daha uzun pencereler (20+) tercih et.
+  - DÜRÜST ETİKET: title, claim ve family, sinyalin GERÇEKTE yaptığıyla uyuşmalı.
+    'regime-conditioned' diyorsan sinyalde conditional/greater_than/volatilite
+    OLMALI; 'composite' diyorsan birden çok sinyali birleştirmelisin. Sade
+    momentum'a 'momentum' de, abartılı etiket yapıştırma (critic reddeder).
   - Şema tam olarak şu örnekteki gibi olmalı:
 
 {_EXAMPLE}
@@ -103,8 +107,10 @@ CHAMPION:
 {parent_json}"""
     elif ctx.suggested_family:
         task = (f"GÖREV — YENİ: Araştırma bütçesi bu tur '{ctx.suggested_family}' "
-                f"ailesine ayrıldı. family alanını '{ctx.suggested_family}' yap ve bu "
-                f"mekanizmaya uygun, özgün bir hipotez üret. Zayıf aileleri tekrarlama.")
+                f"ailesine ayrıldı. Bu aileye UYAN GERÇEK bir mekanizma kur — sinyal "
+                f"gerçekten o aileyi uygulamalı (etiket-sinyal uyuşmalı). Örn. "
+                f"'regime_conditioned' için conditional/volatilite kullan. Eğer bu "
+                f"aileyi dürüstçe uygulayamıyorsan, sinyaline UYAN family'yi seç.")
     else:
         task = """GÖREV — YENİ: Derslere göre UMUT VERİCİ aileyi seç ya da hiç
 denenmemiş bir yön keşfet. ZAYIF aileleri (dersteki uyarılar) tekrarlama."""
