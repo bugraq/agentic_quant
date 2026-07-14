@@ -174,18 +174,23 @@ def _multiple_testing(memory_db: str) -> str:
                else '<span class="pill muted">geçmedi</span>')
         dsr = f"{r.dsr:.2f}" + (" ★" if r.dsr > 0.95 else "")
         copy_tag = f" ×{r.n_copies}" if r.n_copies > 1 else ""
+        var_tag = f"+{r.n_param_variants}" if r.n_param_variants else "–"
         body += (f"<tr><td>{_esc(r.hypothesis_id)}{_esc(copy_tag)}</td>"
                  f'<td class="num">{r.ann_sharpe:.2f}</td>'
                  f'<td class="num">{r.raw_p:.3f}</td><td class="num">{dsr}</td>'
                  f'<td class="num">[{r.ci_low:.2f}, {r.ci_high:.2f}]</td>'
+                 f'<td class="num">{var_tag}</td>'
                  f"<td>{fdr}</td></tr>")
     return ('<div class="card"><table><tr><th>Kimlik</th><th>Sharpe</th>'
-            '<th>ham p</th><th>DSR</th><th>%95 güven aralığı</th><th>FDR</th></tr>'
+            '<th>ham p</th><th>DSR</th><th>%95 güven aralığı</th>'
+            '<th>varyant</th><th>FDR</th></tr>'
             + body + "</table></div>"
             '<div class="desc" style="margin-top:8px">★ = DSR &gt; 0.95: deneme sayısı '
             'düzeltildikten sonra bile anlamlı. Güven aralığı sıfırı içeriyorsa sonuç '
-            'kesin değildir. ×N = N deneme birebir aynı getiriyi üretti (ölü parametre: '
-            'o pencere stratejiyi etkilemiyor).</div>')
+            'kesin değildir. varyant (+N) = optimizer bu stratejinin N pencere '
+            'varyantını aradı; korelasyonlu oldukları için bağımsız deneme sayılmaz '
+            '(Doküman 10.1) — sadece birincil stratejiler paydaya girer. '
+            '×N = N deneme birebir aynı getiriyi üretti (ölü parametre).</div>')
 
 
 def _pareto(memory_db: str) -> str:

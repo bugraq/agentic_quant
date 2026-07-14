@@ -183,11 +183,14 @@ class MemoryStore:
 
     def backtested_experiments(self) -> list[tuple]:
         """Backtest edilmiş TÜM deneyler (accept+reject) — multiple testing için.
-        Döndürür: (hypothesis_id, title, decision, sharpe, returns_list)."""
+        Döndürür: (hid, title, decision, sharpe, returns_list, relation_type, parent_id).
+        relation_type/parent, çoklu-testte parametre varyantlarını parent'a katlar."""
         rows = self.conn.execute(
-            """SELECT hypothesis_id, title, decision, sharpe, returns_json
+            """SELECT hypothesis_id, title, decision, sharpe, returns_json,
+                      relation_type, parent_hypothesis_id
                FROM experiment WHERE returns_json IS NOT NULL""").fetchall()
-        return [(h, t, d, s, json.loads(rj)) for h, t, d, s, rj in rows]
+        return [(h, t, d, s, json.loads(rj), rel, par)
+                for h, t, d, s, rj, rel, par in rows]
 
     def family_outcome_counts(self) -> dict[str, tuple[int, int]]:
         """Bandit için: family -> (kabul, toplam_backtest). Sadece backtest'lenenler."""
