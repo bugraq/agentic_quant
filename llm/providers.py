@@ -119,6 +119,12 @@ def make_provider(config: dict) -> HypothesisProvider:
         from baselines import RandomHypothesisProvider
         return RandomHypothesisProvider(seed=int(config.get("seed", 0)))
 
+    if provider in ("gp", "genetic"):
+        # Genetic-programming baseline (Deney A): fitness'a göre evrimleşen DSL
+        # ağaçları (crossover+mutasyon), LLM'siz/gerekçesiz. Random'dan güçlü alt-çıta.
+        from baselines import GPHypothesisProvider
+        return GPHypothesisProvider(seed=int(config.get("seed", 0)))
+
     if provider in _OPENAI_COMPATIBLE_DEFAULTS:
         # Gecikmeli import: döngüsel bağımlılığı önler
         from llm.openai_client import OpenAICompatibleClient
