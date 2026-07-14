@@ -78,6 +78,33 @@ def load_data(campaign: dict, data_cfg: dict, research_fraction: float):
     return split_by_fraction(full, research_fraction)
 
 
+def _backfill_audits(memory: MemoryStore, data, cfg: CampaignConfig) -> None:
+    """Reviewer raporu olmayan kabullere Backtest Auditor raporu üret (geriye-uyum).
+
+    Eski kabuller auditor özelliğinden önce kaydedildiği için reviews_json boştur;
+    veri yüklüyken deterministik denetimi çalıştırıp kaydı güncelleriz.
+    """
+    pending = memory.accepted_without_reviews()
+    if not pending:
+        return
+    from agents.backtest_auditor import BacktestAuditor
+    from backtest import run_backtest
+    from dsl import compile_hypothesis
+    auditor = BacktestAuditor()
+    done = 0
+    for row_id, _hid, hj in pending:
+        try:
+            hyp = HypothesisSpec.model_validate_json(hj)
+            graph = compile_hypothesis(hyp)
+            res = run_backtest(graph, hyp, data, cost_bps=cfg.cost_bps)
+            memory.set_reviews(row_id, [auditor.audit(hyp, res, data, cfg.cost_bps)])
+            done += 1
+        except Exception:  # noqa: BLE001 — bir kayıt patlarsa diğerleri sürsün
+            pass
+    if done:
+        print(f"[reviewer] {done} eski kabule Backtest Auditor raporu geriye-dolduruldu.")
+
+
 def run_holdout_mode(campaign: dict, cfg: CampaignConfig, holdout_data) -> None:
     """--holdout: hafızadaki kabul edilmiş adayları kilitli dönemde sına.
 
@@ -181,6 +208,10 @@ def main() -> None:
           f"Bütçe: {cfg.max_experiments} deney\n")
 
     run_campaign(provider, data, memory, cfg, critic=critic, literature=literature)
+
+    # GERİYE-DOLDURMA: reviewer özelliğinden önce kabul edilmiş hipotezlerin
+    # Backtest Auditor raporu yok. Veri hâlâ yüklüyken üret (dashboard tam olsun).
+    _backfill_audits(memory, data, cfg)
 
     print("\n--- ÖZET ---")
     print(f"Toplam deney (multiple-testing muhasebesi): {memory.total_experiments()}")

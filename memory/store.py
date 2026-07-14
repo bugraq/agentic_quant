@@ -166,6 +166,22 @@ class MemoryStore:
                FROM experiment WHERE decision='accept'
                ORDER BY sharpe DESC LIMIT ?""", (limit,)).fetchall()
 
+    def accepted_without_reviews(self) -> list[tuple]:
+        """Reviewer raporu OLMAYAN kabul edilmiş hipotezler (geriye-doldurma için).
+        Döndürür: (id, hypothesis_id, hypothesis_json)."""
+        return self.conn.execute(
+            """SELECT id, hypothesis_id, hypothesis_json FROM experiment
+               WHERE decision='accept' AND hypothesis_json IS NOT NULL
+                 AND (reviews_json IS NULL OR reviews_json='')""").fetchall()
+
+    def set_reviews(self, row_id: int, reviews: list) -> None:
+        """Belirli bir deney kaydına reviewer raporlarını yaz (geriye-doldurma)."""
+        payload = json.dumps(
+            [r.model_dump() if hasattr(r, "model_dump") else r for r in reviews])
+        self.conn.execute("UPDATE experiment SET reviews_json=? WHERE id=?",
+                          (payload, row_id))
+        self.conn.commit()
+
     def accepted_full(self) -> list[tuple]:
         """Pareto için: (hid, title, sharpe, max_drawdown, turnover, returns_list)."""
         rows = self.conn.execute(
