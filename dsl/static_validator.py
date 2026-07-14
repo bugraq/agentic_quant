@@ -93,6 +93,15 @@ def validate(graph: StrategyGraph, hyp: HypothesisSpec,
                         f"(desteklenen: {sorted(REBALANCE_DAYS)}).",
             required_action="daily/weekly/monthly kullan."))
         reject_level = True
+    # sector_neutral yalnızca long-short'ta uygulanır (motorda long-only'de
+    # sahte short üretmemek için atlanır) — beyan=çalıştırılan olsun diye reddet.
+    if hyp.portfolio.sector_neutral and hyp.portfolio.type != "cross_sectional_long_short":
+        issues.append(Issue(
+            type="unsupported_sector_neutral",
+            description=(f"sector_neutral yalnızca cross_sectional_long_short'ta "
+                        f"uygulanıyor; '{hyp.portfolio.type}' için beyan yok sayılırdı."),
+            required_action="cross_sectional_long_short kullan ya da sector_neutral=false yap."))
+        reject_level = True
 
     # --- 0b) Kampanya izin listeleri (varsa) ---
     if allowed_rebalance and hyp.execution.rebalance not in allowed_rebalance:

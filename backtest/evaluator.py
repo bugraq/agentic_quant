@@ -26,6 +26,28 @@ def _demean_xs(df: pd.DataFrame) -> pd.DataFrame:
     return df.sub(df.mean(axis=1), axis=0)
 
 
+def sector_groups(columns, sectors: "dict | None") -> "dict[str, list]":
+    """Kolonları (ticker) sektöre göre grupla; bilinmeyenler tek grupta."""
+    groups: dict[str, list] = {}
+    for c in columns:
+        groups.setdefault((sectors or {}).get(c, "_UNKNOWN"), []).append(c)
+    return groups
+
+
+def demean_by_sector(df: pd.DataFrame, sectors: "dict | None") -> pd.DataFrame:
+    """Her sektör grubu İÇİNDE kesitsel demean (sektör-nötr).
+
+    Sektör haritası yoksa piyasa-nötre (tek grup) düşer — dürüstçe belgelendi.
+    """
+    if not sectors:
+        return _demean_xs(df)
+    out = df.copy()
+    for _sec, cols in sector_groups(df.columns, sectors).items():
+        sub = df[cols]
+        out[cols] = sub.sub(sub.mean(axis=1), axis=0)
+    return out
+
+
 def _eval_node(node: GraphNode, vals: dict[str, Value], data: MarketData) -> Value:
     op = node.op
     p = node.params
@@ -80,8 +102,10 @@ def _eval_node(node: GraphNode, vals: dict[str, Value], data: MarketData) -> Val
         return x.clip(lower=lo, upper=hi, axis=0)
     if op == "normalize":
         return x.sub(x.mean(axis=1), axis=0).div(x.std(axis=1) + 1e-12, axis=0)
-    if op in ("demean", "neutralize_market", "neutralize_sector"):
-        return _demean_xs(x)   # iskelet: sektör haritası yoksa piyasa-nötr
+    if op in ("demean", "neutralize_market"):
+        return _demean_xs(x)   # piyasa-nötr (kesit ortalaması çıkar)
+    if op == "neutralize_sector":
+        return demean_by_sector(x, data.sectors)   # gerçek sektör-nötr (harita varsa)
 
     # --- aritmetik (elementwise) ---
     if op == "negate":

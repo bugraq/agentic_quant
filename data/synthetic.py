@@ -18,6 +18,10 @@ import pandas as pd
 @dataclass
 class MarketData:
     fields: dict[str, pd.DataFrame]
+    # ticker -> GICS sektör (varsa). Gerçek sektör-nötralizasyonu için gerekir;
+    # None ise neutralize_sector / portfolio.sector_neutral piyasa-nötre düşer
+    # (dürüstçe belgelendi — sentetik/plain veride sektör yok).
+    sectors: "dict[str, str] | None" = None
 
     def get(self, name: str) -> pd.DataFrame:
         if name not in self.fields:
@@ -56,8 +60,10 @@ def split_by_fraction(md: MarketData, research_frac: float = 0.7) -> tuple[Marke
     """
     n = len(md.dates)
     cut = int(n * research_frac)
-    research = MarketData(fields={k: v.iloc[:cut].copy() for k, v in md.fields.items()})
-    holdout = MarketData(fields={k: v.iloc[cut:].copy() for k, v in md.fields.items()})
+    research = MarketData(fields={k: v.iloc[:cut].copy() for k, v in md.fields.items()},
+                          sectors=md.sectors)
+    holdout = MarketData(fields={k: v.iloc[cut:].copy() for k, v in md.fields.items()},
+                         sectors=md.sectors)
     return research, holdout
 
 

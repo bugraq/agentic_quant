@@ -130,8 +130,28 @@ def reconstruct_membership(current_tickers: list[str], changes: pd.DataFrame,
     return pd.DataFrame(data, index=dates, columns=cols)
 
 
-def fetch_wikipedia_sp500() -> tuple[list[str], pd.DataFrame]:
-    """Wikipedia'dan (bugünkü üyeler, değişiklik olayları) çek. AĞ GEREKTİRİR."""
+def _extract_sectors(current: pd.DataFrame) -> dict[str, str]:
+    """Bugünkü üye tablosundan ticker(Yahoo) -> GICS sektör haritası çıkar."""
+    cols = {str(c).lower(): c for c in current.columns}
+    sym_col = next(current[c] for lc, c in cols.items() if lc in ("symbol", "ticker"))
+    sec_col = next((current[c] for lc, c in cols.items() if "gics sector" in lc
+                    or lc == "sector"), None)
+    if sec_col is None:
+        return {}
+    out: dict[str, str] = {}
+    for tkr, sec in zip(sym_col, sec_col):
+        t = _clean_ticker(tkr)
+        if t and isinstance(sec, str) and sec.strip():
+            out[yahoo_symbol(t)] = sec.strip()
+    return out
+
+
+def fetch_wikipedia_sp500() -> tuple[list[str], pd.DataFrame, dict[str, str]]:
+    """Wikipedia'dan (bugünkü üyeler, değişiklik olayları, sektör haritası) çek.
+
+    AĞ GEREKTİRİR. Sektör haritası bugünkü tablodandır (tarihsel sektör
+    değişimi ihmal — sektörler yıllar içinde nadiren değişir; makul yaklaşım).
+    """
     import io
 
     import requests
@@ -146,7 +166,22 @@ def fetch_wikipedia_sp500() -> tuple[list[str], pd.DataFrame]:
     sym_col = next(c for c in current.columns if str(c).lower() in ("symbol", "ticker"))
     current_tickers = [t for t in current[sym_col].map(_clean_ticker) if t]
     changes = normalize_changes(tables[1])
-    return current_tickers, changes
+    sectors = _extract_sectors(current)
+    return current_tickers, changes, sectors
+
+
+def load_sectors(cache_dir: str = "data") -> dict[str, str]:
+    """Sektör haritasını cache'ten yükle; yoksa Wikipedia'dan çekip cache'le."""
+    os.makedirs(cache_dir, exist_ok=True)
+    path = os.path.join(cache_dir, "sp500_sectors.csv")
+    if os.path.exists(path):
+        df = pd.read_csv(path)
+        return dict(zip(df["ticker"], df["sector"]))
+    _cur, _chg, sectors = fetch_wikipedia_sp500()
+    if sectors:
+        pd.DataFrame({"ticker": list(sectors), "sector": list(sectors.values())}
+                     ).to_csv(path, index=False)
+    return sectors
 
 
 def load_membership(start: str, end: str, cache_dir: str = "data") -> pd.DataFrame:
@@ -156,7 +191,7 @@ def load_membership(start: str, end: str, cache_dir: str = "data") -> pd.DataFra
     if os.path.exists(path):
         df = pd.read_csv(path, index_col=0, parse_dates=True)
         return df.astype(bool)
-    current, changes = fetch_wikipedia_sp500()
+    current, changes, _sectors = fetch_wikipedia_sp500()
     mem = reconstruct_membership(current, changes, start, end)
     mem.to_csv(path)
     return mem

@@ -172,7 +172,7 @@ class SP500PointInTimeAdapter:
         return merged
 
     def load(self) -> MarketData:
-        from data.pit_universe import load_membership
+        from data.pit_universe import load_membership, load_sectors
 
         membership = load_membership(self.start, self.end, self.cache_dir)
         tickers = list(membership.columns)
@@ -206,7 +206,16 @@ class SP500PointInTimeAdapter:
         # Kısıtlı ffill (delist boşluklarını KAPATMAZ, kısa boşlukları düzeltir)
         fields = {k: (v.sort_index().ffill(limit=5) if k != "index_membership" else v)
                   for k, v in fields.items()}
-        return MarketData(fields=fields)
+        # Sektör haritası (GICS) — gerçek sektör-nötralizasyonu için (yalnızca
+        # işlem gören ticker'lar). Çekilemezse None (piyasa-nötre düşer).
+        try:
+            all_sectors = load_sectors(self.cache_dir)
+            sectors = {t: all_sectors[t] for t in have if t in all_sectors} or None
+        except Exception as e:  # noqa: BLE001 — sektör yoksa araştırma durmasın
+            print(f"  [pit] sektör haritası çekilemedi ({type(e).__name__}); "
+                  f"sektör-nötr piyasa-nötre düşecek.")
+            sectors = None
+        return MarketData(fields=fields, sectors=sectors)
 
 
 def make_adapter(config: dict) -> DataAdapter:

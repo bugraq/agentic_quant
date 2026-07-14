@@ -125,10 +125,33 @@ def _apply_rebalance(weights: pd.DataFrame, interval: int) -> pd.DataFrame:
     return weights.where(pd.Series(keep, index=weights.index), np.nan).ffill().fillna(0)
 
 
+def _apply_sector_neutral(weights: pd.DataFrame, data: MarketData) -> pd.DataFrame:
+    """portfolio.sector_neutral: her sektör grubunu net-sıfır yap, gross'u koru.
+
+    Beyan edilen sector_neutral GERÇEKTEN uygulanır (Doküman 7 şema=çalıştırılan).
+    Sektör haritası yoksa değişiklik yapılmaz (LS zaten piyasa-nötr; dürüst).
+    """
+    from backtest.evaluator import sector_groups
+    if not data.sectors:
+        return weights
+    out = weights.copy()
+    for _sec, cols in sector_groups(weights.columns, data.sectors).items():
+        sub = weights[cols]
+        out[cols] = sub.sub(sub.mean(axis=1), axis=0)   # sektör içi net-sıfır
+    # Gross'u yeniden 1'e ölçekle (sektör-demean gross'u düşürebilir)
+    gross = out.abs().sum(axis=1).replace(0, np.nan)
+    return out.div(gross, axis=0).fillna(0)
+
+
 def compute_pnl(signal, hyp: HypothesisSpec, data: MarketData, cost_bps: float):
     """Sinyal -> (net_pnl, turnover_t) serileri. Motor çekirdeği; tekrar kullanılır."""
     signal = _universe_mask(hyp, data, signal)   # evren filtresi (point-in-time)
     weights = _build_weights(signal, hyp.portfolio)
+    # sector_neutral yalnızca long-short'ta anlamlı (long-only'de demean sahte
+    # short üretir); orada beyanı net-sıfır-per-sektör olarak uygula.
+    if getattr(hyp.portfolio, "sector_neutral", False) \
+            and hyp.portfolio.type == "cross_sectional_long_short":
+        weights = _apply_sector_neutral(weights, data)
     weights = _apply_rebalance(weights, _effective_interval(hyp))
 
     # ★ Beyan edilen işlem anı UYGULANIR: trade_time -> bar gecikmesi + faz.
