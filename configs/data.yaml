@@ -11,6 +11,9 @@ data:
   # Tarih aralığı campaign.yaml'dan enjekte edilir (tek kaynak).
   sp500_pit:
     cache_dir: data
+    delisting_shock: 0.30    # delist olan hisse pozisyondan bu kayıpla çıkar
+                             # (CRSP delisting return'ün tutucu placeholder'ı;
+                             # 0.0 = eski iyimser 'kayıpsız çıkış'). Doküman 7.
 
   synthetic:
     kind: momentum           # momentum | reversal | random

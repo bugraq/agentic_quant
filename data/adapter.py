@@ -96,6 +96,38 @@ class YFinanceAdapter:
         return MarketData(fields=fields)
 
 
+def _inject_delisting_shock(fields: dict, price_keys: list[str], shock: float) -> int:
+    """Delist olan hisselere (verisi pencere sonundan önce biten) delisting şoku uygula.
+
+    Her fiyat alanı için: hissenin gerçek son geçerli barından SONRAKİ ilk bara
+    son_fiyat*(1-şok) yazılır (o an NaN olmalı — yani gerçek delisting). Pozisyon
+    o barda şok getirisini (-şok) alır. Değişiklik yerinde (in-place) yapılır.
+    Döndürür: şok uygulanan (delist olan) hisse sayısı.
+    """
+    close = fields["close"]
+    dates = close.index
+    last_date = dates[-1]
+    delisted = 0
+    for tkr in close.columns:
+        lv = close[tkr].last_valid_index()
+        if lv is None or lv >= last_date:
+            continue                       # hiç veri yok ya da sona kadar yaşıyor
+        pos = dates.get_loc(lv)
+        if pos + 1 >= len(dates):
+            continue
+        shock_bar = dates[pos + 1]
+        # Yalnızca gerçek boşluk (o bar zaten NaN) ise şok yaz — veri varsa dokunma
+        if pd.notna(close.at[shock_bar, tkr]):
+            continue
+        for key in price_keys:
+            if tkr in fields[key].columns:
+                base = fields[key][tkr].loc[lv]
+                if pd.notna(base):
+                    fields[key].at[shock_bar, tkr] = base * (1.0 - shock)
+        delisted += 1
+    return delisted
+
+
 class SP500PointInTimeAdapter:
     """
     Point-in-time S&P 500 evreni (Doküman 4/7 — survivorship DÜZELTMESİ).
@@ -115,8 +147,13 @@ class SP500PointInTimeAdapter:
 
     _BATCH = 100   # yfinance tek istekte çok ticker'ı sever ama batch daha sağlam
 
-    def __init__(self, start: str, end: str, cache_dir: str = "data") -> None:
+    def __init__(self, start: str, end: str, cache_dir: str = "data",
+                 delisting_shock: float = 0.30) -> None:
         self.start, self.end, self.cache_dir = str(start), str(end), cache_dir
+        # Delist olan hisse pozisyondan bu kadar KAYIPLA çıkar (Doküman 7 /
+        # "Beyond Agent Architecture" eleştirisi). CRSP delisting return'ün
+        # tutucu placeholder'ı; 0.0 = eski iyimser davranış (kayıpsız çıkış).
+        self.delisting_shock = float(delisting_shock)
 
     def _download_prices(self, tickers: list[str]) -> pd.DataFrame:
         cache = os.path.join(self.cache_dir,
@@ -203,6 +240,18 @@ class SP500PointInTimeAdapter:
             "dollar_volume": (close * volume)[have],
             "index_membership": memb[have],
         }
+        # DELISTING ŞOKU (ffill'DEN ÖNCE): pencere sonundan önce verisi biten
+        # (delist olan) hisse için, gerçek son fiyattan sonraki ilk bara
+        # fiyat*(1-şok) yaz. Pozisyon o barda kaybı yer, sonra ffill kısa kuyruğu
+        # taşır. Böylece batan şirketi tutmanın maliyeti modellenir (survivorship
+        # kalıntısını azaltır). index_membership ve volume'a dokunulmaz.
+        if self.delisting_shock > 0:
+            n_delisted = _inject_delisting_shock(
+                fields, ["open", "high", "low", "close", "adjusted_close"],
+                self.delisting_shock)
+            if n_delisted:
+                print(f"  [pit] delisting şoku (-%{self.delisting_shock*100:.0f}) "
+                      f"{n_delisted} delist olan hisseye uygulandı.")
         # Kısıtlı ffill (delist boşluklarını KAPATMAZ, kısa boşlukları düzeltir)
         fields = {k: (v.sort_index().ffill(limit=5) if k != "index_membership" else v)
                   for k, v in fields.items()}
@@ -235,5 +284,6 @@ def make_adapter(config: dict) -> DataAdapter:
     if source == "sp500_pit":
         p = config.get("sp500_pit", {})
         return SP500PointInTimeAdapter(start=p["start"], end=p["end"],
-                                       cache_dir=p.get("cache_dir", "data"))
+                                       cache_dir=p.get("cache_dir", "data"),
+                                       delisting_shock=float(p.get("delisting_shock", 0.30)))
     raise NotImplementedError(f"Bilinmeyen veri kaynağı: {source!r}")
