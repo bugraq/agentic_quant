@@ -125,6 +125,12 @@ def make_provider(config: dict) -> HypothesisProvider:
         from baselines import GPHypothesisProvider
         return GPHypothesisProvider(seed=int(config.get("seed", 0)))
 
+    if provider in ("bayesopt", "bayesian"):
+        # Bayesian-optimization baseline (Deney A): TPE ile sabit şablonların
+        # hiperparametrelerini fitness modelleyerek arar. MVP kriter 9'un 3. baseline'ı.
+        from baselines import BayesianOptProvider
+        return BayesianOptProvider(seed=int(config.get("seed", 0)))
+
     if provider in _OPENAI_COMPATIBLE_DEFAULTS:
         # Gecikmeli import: döngüsel bağımlılığı önler
         from llm.openai_client import OpenAICompatibleClient

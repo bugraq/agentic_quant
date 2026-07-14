@@ -33,5 +33,9 @@ compare:
       provider: gp           # fitness'a göre evrimleşen DSL ağaçları (LLM'siz)
       seed: 0
 
+    - label: bayesian-opt
+      provider: bayesopt     # TPE ile hiperparametre araması (LLM'siz)
+      seed: 0
+
   critic: dummy            # dummy | models_yaml (models.yaml'daki critic'i kullan)
   output_dir: runs         # yarışmacı başına ayrı hafıza DB'si buraya yazılır
