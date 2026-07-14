@@ -100,7 +100,8 @@ class CampaignConfig:
 def _decide_mode(iteration: int, memory: MemoryStore):
     """Mod kararı: keşif turlarında yeni; sonra pozitif champion varsa onu geliştir.
 
-    Döndürür: (GenerationMode, parent_hypothesis | None, champion_sharpe | None)
+    Döndürür: (GenerationMode, parent_A | None, parent_B | None, champion_sharpe | None)
+    parent_B yalnızca combination modunda doludur.
     """
     # Champion = KABUL EDİLMİŞ en iyi hipotez (ham Sharpe peşinde koşma yok, Doküman 16.1).
     # Revizyonları defalarca duplicate üretmiş champion KARANTİNADA (komşuluğu
@@ -110,7 +111,16 @@ def _decide_mode(iteration: int, memory: MemoryStore):
     champ_sharpe = champion[1] if champion else None
     # Keşif turları: sıfırdan yeni yön dene.
     if iteration < EXPLORE_ROUNDS:
-        return GenerationMode.new, None, champ_sharpe
+        return GenerationMode.new, None, None, champ_sharpe
+    # BİRLEŞTİRME (combination, Doküman 16.3): en az 2 kabul edilmiş hipotez varsa
+    # her 5. turda ikisinin sinyalini birleştir (composite). Farklı ailelerden iki
+    # zayıf-ama-gerçek sinyal, birleşince güçlenebilir (ör. momentum × düşük-vol).
+    if iteration % 5 == 4:
+        top = memory.accepted_hypotheses(limit=2)
+        if len(top) >= 2:
+            pa = HypothesisSpec.model_validate_json(top[0][1])
+            pb = HypothesisSpec.model_validate_json(top[1][1])
+            return GenerationMode.combination, pa, pb, champ_sharpe
     # Exploit fazı. İki durumda başarısız bir hipotezi TERS ÇEVİR (inversion):
     #   (a) hiç kabul yoksa (champion None) — pes etme, naive sinyalin tersini dene
     #       (ör. momentum kaybediyorsa kısa-vadeli reversal kazanıyor olabilir);
@@ -123,17 +133,19 @@ def _decide_mode(iteration: int, memory: MemoryStore):
         failed = memory.worst_failed_hypothesis(exclude=memory.inverted_parent_ids())
         if failed:
             return (GenerationMode.inversion,
-                    HypothesisSpec.model_validate_json(failed[0]), champ_sharpe)
+                    HypothesisSpec.model_validate_json(failed[0]), None, champ_sharpe)
         # Ters çevrilecek YENİ aday yoksa keşfe dön (tekrar üretme).
-        return GenerationMode.new, None, champ_sharpe
-    return GenerationMode.revision, HypothesisSpec.model_validate_json(champion[0]), champ_sharpe
+        return GenerationMode.new, None, None, champ_sharpe
+    return (GenerationMode.revision,
+            HypothesisSpec.model_validate_json(champion[0]), None, champ_sharpe)
 
 
 def _build_context(cfg: CampaignConfig, memory: MemoryStore, remaining: int,
                    mode: GenerationMode, parent: HypothesisSpec | None,
                    suggested_family: str | None = None,
                    literature: list[str] | None = None,
-                   duplicate_feedback: list[str] | None = None) -> ResearchContext:
+                   duplicate_feedback: list[str] | None = None,
+                   parent_b: HypothesisSpec | None = None) -> ResearchContext:
     priors = [
         ExperimentSummary(hypothesis_id=h, title=t, family=f, outcome=d,
                           headline_metric=(f"Sharpe {s:.2f}" if s is not None else None))
@@ -154,6 +166,7 @@ def _build_context(cfg: CampaignConfig, memory: MemoryStore, remaining: int,
         lessons=lessons,
         generation_mode=mode,
         parent_hypothesis=parent,
+        parent_hypothesis_b=parent_b,
         suggested_family=suggested_family,
         literature_mechanisms=literature or [],
         experiments_remaining=remaining,
@@ -196,14 +209,14 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
                   f"({used}); kampanya durduruldu.")
             break
         remaining = cfg.max_experiments - i
-        mode, parent, champ_sharpe = _decide_mode(i, memory)
+        mode, parent, parent_b, champ_sharpe = _decide_mode(i, memory)
         # ADAPTİF MOD (revision kara deliği önlemi): üst üste 2+ slot duplicate
         # ile bittiyse champion/inversion etrafında dönmeyi bırak, keşfe zorla
         # (gerçek koşuda görüldü: 24 slotun 10'u champion revizyonu duplicate'iydi).
         if consecutive_dup_slots >= 2 and mode != GenerationMode.new:
             print(f"    (adaptif: üst üste {consecutive_dup_slots} duplicate slot — "
                   f"{mode.value} bırakıldı, keşif moduna geçildi)")
-            mode, parent = GenerationMode.new, None
+            mode, parent, parent_b = GenerationMode.new, None, None
         # Yeni hipotez modunda bandit aile seçer (bütçe tahsisi); revision'da champion'ın ailesi
         suggested = bandit.select(memory.family_outcome_counts()) \
             if mode == GenerationMode.new else None
@@ -224,7 +237,8 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
 
         for attempt in range(1 + MAX_DUP_RETRIES):
             ctx = _build_context(cfg, memory, remaining, mode, parent, suggested,
-                                 literature, duplicate_feedback=dup_feedback)
+                                 literature, duplicate_feedback=dup_feedback,
+                                 parent_b=parent_b)
             # 0) Hipotez üret — LLM geçerli çıktı veremezse slotu atla
             try:
                 hyp = provider.next(ctx)

@@ -70,7 +70,8 @@ class ResearchContext(BaseModel):
 
     # Üretim modu
     generation_mode: GenerationMode = GenerationMode.new
-    parent_hypothesis: Optional[HypothesisSpec] = None   # revision/combination için
+    parent_hypothesis: Optional[HypothesisSpec] = None   # revision/inversion/combination (A)
+    parent_hypothesis_b: Optional[HypothesisSpec] = None  # combination için ikinci ebeveyn (B)
     critic_feedback: Optional[Decision] = None            # "şunu düzelt"
     duplicate_feedback: list[str] = Field(
         default_factory=list,

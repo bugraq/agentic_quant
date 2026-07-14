@@ -153,6 +153,22 @@ Aynısını kopyalama; ölçülebilir bir iyileştirme hedefle.
 
 CHAMPION:
 {parent_json}"""
+    elif ctx.generation_mode.value == "combination" and ctx.parent_hypothesis is not None \
+            and ctx.parent_hypothesis_b is not None:
+        pa = ctx.parent_hypothesis.model_dump_json(indent=0)
+        pb = ctx.parent_hypothesis_b.model_dump_json(indent=0)
+        task = f"""GÖREV — BİRLEŞTİRME (combination): Aşağıdaki İKİ kabul edilmiş
+hipotezin sinyallerini ANLAMLI biçimde BİRLEŞTİR (yeni tek bir composite sinyal).
+İki sinyali features bloğunda ayrı kur, sonra signal'de multiply/subtract ile ya da
+biri diğerini KOŞULLAYARAK (conditional) birleştir. family='composite' kullan,
+claim iki mekanizmanın neden BİRLİKTE daha güçlü olduğunu açıklasın. İkisinin
+KOPYASI değil, gerçek bir sentez üret.
+
+HİPOTEZ A:
+{pa}
+
+HİPOTEZ B:
+{pb}"""
     elif ctx.suggested_family:
         task = (f"GÖREV — YENİ: Araştırma bütçesi bu tur '{ctx.suggested_family}' "
                 f"ailesine ayrıldı. Bu aileye UYAN GERÇEK bir mekanizma kur — sinyal "

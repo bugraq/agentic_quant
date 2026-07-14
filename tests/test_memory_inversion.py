@@ -55,7 +55,7 @@ def test_inversion_not_repeated():
              result=_result("hyp_0001", -2.0))
 
     # İlk exploit turu: hyp_0001'in inversion'ı seçilmeli
-    mode, parent, _ = _decide_mode(iteration=5, memory=m)
+    mode, parent, _pb, _ = _decide_mode(iteration=5, memory=m)
     assert mode == GenerationMode.inversion and parent.hypothesis_id == "hyp_0001"
 
     # Inversion denendi (duplicate'e düştü diyelim) — lineage'a yazıldı
@@ -63,14 +63,14 @@ def test_inversion_not_repeated():
              parent_hypothesis_id="hyp_0001", relation_type="inversion")
 
     # Sonraki tur: AYNI parent tekrar seçilMEmeli; başka aday yok -> keşfe dön
-    mode2, parent2, _ = _decide_mode(iteration=6, memory=m)
+    mode2, parent2, _pb2, _ = _decide_mode(iteration=6, memory=m)
     assert mode2 == GenerationMode.new and parent2 is None, \
         f"aynı parent tekrar ters çevrildi: {mode2}, {parent2}"
 
     # Yeni bir kötü başarısız gelirse (hyp_0003) inversion ona geçmeli
     m.record(_hyp("hyp_0003"), _reject("hyp_0003"), "gate_rejected",
              result=_result("hyp_0003", -1.5))
-    mode3, parent3, _ = _decide_mode(iteration=7, memory=m)
+    mode3, parent3, _pb3, _ = _decide_mode(iteration=7, memory=m)
     assert mode3 == GenerationMode.inversion and parent3.hypothesis_id == "hyp_0003"
     m.close()
     print("  [ok] aynı parent bir kez ters çevriliyor; aday bitince keşfe dönülüyor")
@@ -93,7 +93,7 @@ def test_revision_quarantine():
 
     # Champion normalde hyp_0001 (Sharpe 0.9 > 0.6).
     # NOT: iteration % 3 == 2 turları inversion'a ayrılır; revision turu seç (6).
-    mode, parent, _ = _decide_mode(iteration=6, memory=m)
+    mode, parent, _pb, _ = _decide_mode(iteration=6, memory=m)
     assert mode == GenerationMode.revision and parent.hypothesis_id == "hyp_0001"
 
     # hyp_0001'in revizyonları 3 kez duplicate üretti -> karantina
@@ -104,7 +104,7 @@ def test_revision_quarantine():
                  parent_hypothesis_id="hyp_0001", relation_type="refinement")
 
     assert "hyp_0001" in m.exhausted_revision_parent_ids()
-    mode2, parent2, _ = _decide_mode(iteration=7, memory=m)
+    mode2, parent2, _pb2, _ = _decide_mode(iteration=7, memory=m)
     assert mode2 == GenerationMode.revision and parent2.hypothesis_id == "hyp_0002", \
         f"karantina çalışmadı: {mode2}, {parent2 and parent2.hypothesis_id}"
     m.close()
