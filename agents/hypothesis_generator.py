@@ -133,6 +133,7 @@ def _build_user_prompt(ctx: ResearchContext) -> str:
         for e in ctx.prior_experiments
     ) or "  (henüz yok)"
     lessons = "\n".join(f"  - {l}" for l in ctx.lessons) or "  (henüz yok)"
+    procedural = "\n".join(f"  - {l}" for l in ctx.procedural_lessons)
     literature = "\n".join(f"  - {m}" for m in ctx.literature_mechanisms)
 
     # Inversion: başarısız hipotezi ters çevir. Revision: champion'ı geliştir. Yeni: keşfet.
@@ -196,9 +197,9 @@ denenmemiş bir yön keşfet. ZAYIF aileleri (dersteki uyarılar) tekrarlama."""
 Evren: {ctx.universe_description}
 Üretim modu: {ctx.generation_mode.value}
 {lit_block}
-DERSLER (geçmiş deneylerden — bunlara UY):
+DERSLER — FAKTÖR AİLELERİ (geçmiş deneylerden — bunlara UY):
 {lessons}
-
+{("SÜREÇ DERSLERİ — HANGİ HAMLE İŞE YARIYOR (Doküman 12.3):" + chr(10) + procedural + chr(10)) if procedural else ""}
 Daha önce denenen hipotezler (aynısını tekrarlama):
 {priors}
 {dup_block}

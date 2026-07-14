@@ -60,7 +60,11 @@ class ResearchContext(BaseModel):
     underexplored_regions: list[str] = Field(default_factory=list)
     lessons: list[str] = Field(
         default_factory=list,
-        description="Semantic memory'den çıkarılan dersler — LLM'e geri besleme")
+        description="Semantic memory'den çıkarılan dersler (hangi FAKTÖR ailesi iyi/kötü)")
+    procedural_lessons: list[str] = Field(
+        default_factory=list,
+        description="Procedural memory (Doküman 12.3): hangi ARAŞTIRMA HAMLESİ "
+                    "(revizyon/ters-çevirme/birleştirme) işe yarıyor + eleme örüntüsü")
     literature_mechanisms: list[str] = Field(
         default_factory=list,
         description="Web/literatür aramasından gelen gerçek faktörler (Doküman 4.3)")

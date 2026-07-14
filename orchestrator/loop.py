@@ -22,6 +22,7 @@ from evaluation import hard_gate_evaluate
 from llm import HypothesisProvider
 from memory import MemoryStore
 from memory.semantic import build_lessons
+from memory.procedural import build_procedural_lessons
 from memory.similarity import NoveltyIndex
 from orchestrator.budget import ThompsonBandit
 from backtest import evaluate_signal
@@ -152,6 +153,7 @@ def _build_context(cfg: CampaignConfig, memory: MemoryStore, remaining: int,
         for (h, t, f, d, s) in memory.prior_summaries()
     ]
     lessons = build_lessons(memory.family_stats())
+    procedural = build_procedural_lessons(memory)   # Doküman 12.3 (hangi hamle işe yarıyor)
     # LLM'e giden evren tarifi: anonimleştirme açıksa ticker/tarih İÇERMEZ.
     llm_universe = ANONYMOUS_UNIVERSE if cfg.anonymize_universe else cfg.universe_description
     return ResearchContext(
@@ -164,6 +166,7 @@ def _build_context(cfg: CampaignConfig, memory: MemoryStore, remaining: int,
         allowed_portfolio_types=cfg.portfolio_types,
         prior_experiments=priors,
         lessons=lessons,
+        procedural_lessons=procedural,
         generation_mode=mode,
         parent_hypothesis=parent,
         parent_hypothesis_b=parent_b,

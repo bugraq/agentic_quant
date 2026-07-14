@@ -518,6 +518,19 @@ def _reviewers(memory_db: str) -> str:
     return "".join(cards)
 
 
+def _procedural(memory_db: str) -> str:
+    """Procedural memory (Doküman 12.3): hangi araştırma hamlesi işe yaradı."""
+    from memory.procedural import build_procedural_lessons
+    store = MemoryStore(memory_db)
+    lessons = build_procedural_lessons(store)
+    store.close()
+    if not lessons:
+        return ('<div class="card desc">Henüz süreç dersi çıkmadı (türetilmiş '
+                'hipotez / yeterli deney yok).</div>')
+    items = "".join(f'<div class="drow">• {_esc(l)}</div>' for l in lessons)
+    return f'<div class="card">{items}</div>'
+
+
 def _families(conn) -> str:
     rows = _q(conn, """SELECT family,
                          SUM(CASE WHEN decision='accept' THEN 1 ELSE 0 END),
@@ -600,6 +613,12 @@ def generate_dashboard(memory_db: str, holdout_db: str, out_path: str,
                  "(champion'ı geliştir), inversion (başarısızı ters çevir). Araştırmanın "
                  "kör deneme değil, yönlü bir keşif olduğunu gösterir.",
                  _lineage(conn)),
+        _section("Süreç Hafızası (Procedural Memory, Doküman 12.3)",
+                 "Sistem yalnızca 'hangi faktör iyi'yi değil, 'hangi ARAŞTIRMA "
+                 "HAMLESİ işe yarıyor'u da öğrenir: revizyon/ters-çevirme/birleştirme "
+                 "kabul oranları, doygun aileler ve en çok elemenin yapıldığı aşama. "
+                 "Bu dersler bir sonraki hipotez üretimine geri beslenir.",
+                 _procedural(memory_db)),
     ]
     conn.close()
     doc = (f'<!doctype html><html lang="tr"><head><meta charset="utf-8">'
