@@ -72,6 +72,10 @@ class ResearchContext(BaseModel):
     # Bandit'in bu tur için önerdiği aile (bütçe tahsisi)
     suggested_family: Optional[str] = None
 
+    # AŞIRI kullanılan operatörler (yapı-tabanlı; family etiketi kandırıldığında bile
+    # gerçek rutu yakalar). 'new' modunda LLM'e "bunlardan kaçın" denir.
+    overused_motifs: list[str] = Field(default_factory=list)
+
     # Üretim modu
     generation_mode: GenerationMode = GenerationMode.new
     parent_hypothesis: Optional[HypothesisSpec] = None   # revision/inversion/combination (A)

@@ -89,6 +89,42 @@ def count_distinct_structures(hyps: "list[HypothesisSpec]") -> int:
     return len({hypothesis_structure(h) for h in hyps})
 
 
+# Her stratejide olan/ayırt etmeyen operatörler (aşırı-kullanım sinyali değil)
+_UBIQUITOUS_OPS = {"cross_sectional_rank", "field", "const", "feature_ref"}
+
+
+def _ops_of(expr: Expression, out: set) -> None:
+    if expr.op not in ("field", "const", "feature_ref"):
+        out.add(expr.op)
+    for c in expr.inputs:
+        if isinstance(c, Expression):
+            _ops_of(c, out)
+
+
+def dominant_operators(hyps: "list[HypothesisSpec]", min_frac: float = 0.5,
+                       k: int = 3) -> list[str]:
+    """Hipotezlerin > min_frac oranında AŞIRI kullandığı operatörler.
+
+    Etiket-tabanlı çeşitlilik (family) LLM'ce kandırılabiliyor ('reversal'ı
+    'regime_conditioned' etiketlemek). Yapı-tabanlı bu sinyal gerçek rutu
+    yakalar: ör. negate/volatility/conditional hipotezlerin çoğunda ise LLM
+    volatilite-koşullu reversal'a sıkışmış demektir.
+    """
+    if not hyps:
+        return []
+    counts: Counter = Counter()
+    for h in hyps:
+        ops: set = set()
+        _ops_of(h.signal, ops)
+        for f in h.features:
+            _ops_of(f.expression, ops)
+        for op in ops - _UBIQUITOUS_OPS:
+            counts[op] += 1
+    n = len(hyps)
+    dominant = [op for op, c in counts.most_common() if c / n > min_frac]
+    return dominant[:k]
+
+
 def _jaccard(a: Counter, b: Counter) -> float:
     inter = sum((a & b).values())
     union = sum((a | b).values())

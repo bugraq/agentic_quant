@@ -137,6 +137,15 @@ class MemoryStore:
         return [r[0] for r in self.conn.execute(
             "SELECT hypothesis_json FROM experiment WHERE hypothesis_json IS NOT NULL")]
 
+    def _all_specs(self) -> list:
+        specs = []
+        for hj in self.all_hypothesis_jsons():
+            try:
+                specs.append(HypothesisSpec.model_validate_json(hj))
+            except Exception:  # noqa: BLE001
+                pass
+        return specs
+
     def distinct_structure_count(self) -> int:
         """Üretilen FARKLI strateji yapısı sayısı (pencereden bağımsız; MVP kriter 3).
 
@@ -144,13 +153,12 @@ class MemoryStore:
         yapısal çeşitliliği ölçer.
         """
         from memory.similarity import count_distinct_structures
-        specs = []
-        for hj in self.all_hypothesis_jsons():
-            try:
-                specs.append(HypothesisSpec.model_validate_json(hj))
-            except Exception:  # noqa: BLE001
-                pass
-        return count_distinct_structures(specs)
+        return count_distinct_structures(self._all_specs())
+
+    def dominant_operators(self, min_frac: float = 0.5, k: int = 3) -> list[str]:
+        """LLM'in AŞIRI kullandığı operatörler (yapı-tabanlı rut sinyali)."""
+        from memory.similarity import dominant_operators
+        return dominant_operators(self._all_specs(), min_frac=min_frac, k=k)
 
     def leaderboard(self, limit: int = 10) -> list[tuple]:
         """Kabul edilenler, Sharpe'a göre (Doküman: campaign leaderboard)."""

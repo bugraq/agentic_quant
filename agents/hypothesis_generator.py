@@ -180,10 +180,15 @@ HİPOTEZ B:
         under = ", ".join(ctx.underexplored_regions) if ctx.underexplored_regions else ""
         under_hint = (f" ÖNCELİK: şu aileler bu kampanyada HİÇ/AZ denendi — "
                       f"bunlardan birini GERÇEKTEN uygula: {under}." if under else "")
+        avoid = ", ".join(ctx.overused_motifs) if ctx.overused_motifs else ""
+        avoid_hint = (f"\n⛔ AŞIRI KULLANIM: son üretimlerin çoğu şu operatörleri "
+                      f"içeriyor: {avoid}. Bu tur bunları KULLANMADAN, farklı "
+                      f"operatörlerle (ör. rolling_mean, delta, ewma, correlation, "
+                      f"cross_sectional_rank tek başına) bir sinyal kur." if avoid else "")
         task = (f"""GÖREV — YENİ: Derslere göre UMUT VERİCİ aileyi seç ya da hiç
 denenmemiş bir yön keşfet. ZAYIF/DOYGUN aileleri (dersteki uyarılar) tekrarlama.{under_hint}
 Sıkışıp aynı fikri (ör. volatilite-koşullu reversal) tekrar tekrar üretme —
-yapısal olarak FARKLI bir mekanizma dene.""")
+yapısal olarak FARKLI bir mekanizma dene.{avoid_hint}""")
 
     lit_block = (f"\nLİTERATÜR (web'den gerçek faktörler — bunlardan İLHAM al, "
                  f"DSL ile uygula):\n{literature}\n" if literature else "")

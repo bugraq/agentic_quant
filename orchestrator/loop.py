@@ -98,47 +98,61 @@ class CampaignConfig:
     parameter_optimization: bool = False
 
 
+# Operasyon karışımı (Doküman 16.3) — KEŞİF AĞIRLIKLI, deterministik ve iyi
+# aralıklı. Eskiden exploit (revision/inversion) döngüyü ezip LLM'i tek
+# komşuluğa (volatilite-reversal) kilitliyordu; gerçek koşuda 24 slotun ~2'si
+# 'new' idi. Bu döngü ~%40 keşif garanti eder → az-keşfedilmiş aileler düzenli
+# denenip çeşitlilik artar. Aday yoksa (champion/failed yok) 'new'e düşülür.
+_OP_CYCLE = [
+    GenerationMode.new, GenerationMode.revision, GenerationMode.inversion,
+    GenerationMode.new, GenerationMode.combination, GenerationMode.revision,
+    GenerationMode.new, GenerationMode.inversion, GenerationMode.revision,
+    GenerationMode.new, GenerationMode.combination, GenerationMode.new,
+    GenerationMode.revision, GenerationMode.inversion, GenerationMode.new,
+    GenerationMode.revision, GenerationMode.combination, GenerationMode.new,
+    GenerationMode.inversion, GenerationMode.new,
+]  # new=8/20 (%40), revision=5, inversion=4, combination=3
+
+
 def _decide_mode(iteration: int, memory: MemoryStore):
-    """Mod kararı: keşif turlarında yeni; sonra pozitif champion varsa onu geliştir.
+    """Operasyon karışımına göre mod seç (Doküman 16.3). Keşif ağırlıklı.
 
     Döndürür: (GenerationMode, parent_A | None, parent_B | None, champion_sharpe | None)
-    parent_B yalnızca combination modunda doludur.
+    parent_B yalnızca combination modunda doludur. İstenen modun adayı yoksa
+    (champion/başarısız/2-kabul yoksa) 'new' keşfe düşer.
     """
     # Champion = KABUL EDİLMİŞ en iyi hipotez (ham Sharpe peşinde koşma yok, Doküman 16.1).
-    # Revizyonları defalarca duplicate üretmiş champion KARANTİNADA (komşuluğu
-    # tükendi); sıradaki en iyi kabule geçilir, o da yoksa keşfe dönülür.
+    # Revizyonları defalarca duplicate üretmiş champion KARANTİNADA (komşuluğu tükendi).
     champion = memory.best_accepted(
         exclude=memory.exhausted_revision_parent_ids())   # (json, sharpe) | None
     champ_sharpe = champion[1] if champion else None
-    # Keşif turları: sıfırdan yeni yön dene.
+    # İlk turlar: saf keşif.
     if iteration < EXPLORE_ROUNDS:
         return GenerationMode.new, None, None, champ_sharpe
-    # BİRLEŞTİRME (combination, Doküman 16.3): en az 2 kabul edilmiş hipotez varsa
-    # her 5. turda ikisinin sinyalini birleştir (composite). Farklı ailelerden iki
-    # zayıf-ama-gerçek sinyal, birleşince güçlenebilir (ör. momentum × düşük-vol).
-    if iteration % 5 == 4:
+
+    want = _OP_CYCLE[iteration % len(_OP_CYCLE)]
+
+    if want == GenerationMode.revision and champion is not None:
+        return (GenerationMode.revision,
+                HypothesisSpec.model_validate_json(champion[0]), None, champ_sharpe)
+
+    if want == GenerationMode.inversion:
+        # Aynı parent BİR KEZ ters çevrilir (lineage'dan) — döngüde tekrar çevirip
+        # bütçeyi duplicate'e yakmasın (gerçek koşuda görüldü).
+        failed = memory.worst_failed_hypothesis(exclude=memory.inverted_parent_ids())
+        if failed:
+            return (GenerationMode.inversion,
+                    HypothesisSpec.model_validate_json(failed[0]), None, champ_sharpe)
+
+    if want == GenerationMode.combination:
         top = memory.accepted_hypotheses(limit=2)
         if len(top) >= 2:
             pa = HypothesisSpec.model_validate_json(top[0][1])
             pb = HypothesisSpec.model_validate_json(top[1][1])
             return GenerationMode.combination, pa, pb, champ_sharpe
-    # Exploit fazı. İki durumda başarısız bir hipotezi TERS ÇEVİR (inversion):
-    #   (a) hiç kabul yoksa (champion None) — pes etme, naive sinyalin tersini dene
-    #       (ör. momentum kaybediyorsa kısa-vadeli reversal kazanıyor olabilir);
-    #   (b) champion varsa her 3. turda çeşitlilik için.
-    # Aksi halde kabul edilmiş champion'ı geliştir (revision).
-    # NOT: aynı parent BİR KEZ ters çevrilir (lineage'dan bakılır) — aksi halde
-    # sistem aynı başarısızı döngüde tekrar tekrar çevirip bütçeyi duplicate'e
-    # yakar (gerçek koşuda görüldü: 8 deneyin 5'i aynı inversion'dı).
-    if champion is None or iteration % 3 == 2:
-        failed = memory.worst_failed_hypothesis(exclude=memory.inverted_parent_ids())
-        if failed:
-            return (GenerationMode.inversion,
-                    HypothesisSpec.model_validate_json(failed[0]), None, champ_sharpe)
-        # Ters çevrilecek YENİ aday yoksa keşfe dön (tekrar üretme).
-        return GenerationMode.new, None, None, champ_sharpe
-    return (GenerationMode.revision,
-            HypothesisSpec.model_validate_json(champion[0]), None, champ_sharpe)
+
+    # want == new, ya da istenen mod için aday yok -> keşif.
+    return GenerationMode.new, None, None, champ_sharpe
 
 
 def _build_context(cfg: CampaignConfig, memory: MemoryStore, remaining: int,
@@ -160,6 +174,8 @@ def _build_context(cfg: CampaignConfig, memory: MemoryStore, remaining: int,
     counts = memory.family_outcome_counts()
     underexplored = [f.value for f in HypothesisFamily
                      if counts.get(f.value, (0, 0))[1] < 2]
+    # AŞIRI kullanılan operatörler (yapı-tabanlı rut; family etiketi kandırılsa bile)
+    overused = memory.dominant_operators(min_frac=0.5, k=3)
     # LLM'e giden evren tarifi: anonimleştirme açıksa ticker/tarih İÇERMEZ.
     llm_universe = ANONYMOUS_UNIVERSE if cfg.anonymize_universe else cfg.universe_description
     return ResearchContext(
@@ -174,6 +190,7 @@ def _build_context(cfg: CampaignConfig, memory: MemoryStore, remaining: int,
         lessons=lessons,
         procedural_lessons=procedural,
         underexplored_regions=underexplored,
+        overused_motifs=overused,
         generation_mode=mode,
         parent_hypothesis=parent,
         parent_hypothesis_b=parent_b,
