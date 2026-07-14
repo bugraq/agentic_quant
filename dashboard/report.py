@@ -120,14 +120,17 @@ def _banner(conn, holdout_db: str) -> str:
             f'{hold_txt}. Aşağıdaki her bölüm sürecin bir yönünü gösterir.</div>')
 
 
-def _tiles(conn) -> str:
+def _tiles(conn, memory_db: str) -> str:
     total = _q(conn, "SELECT COUNT(*) FROM experiment")[0][0]
     by_dec = dict(_q(conn, "SELECT decision, COUNT(*) FROM experiment GROUP BY decision"))
     fams = _q(conn, "SELECT COUNT(DISTINCT family) FROM experiment WHERE sharpe IS NOT NULL")[0][0]
+    store = MemoryStore(memory_db)
+    structures = store.distinct_structure_count()   # farklı YAPI (pencereden bağımsız)
+    store.close()
     items = [("Toplam hipotez", total, "b"), ("Kabul edilen", by_dec.get("accept", 0), "g"),
              ("Reddedilen", by_dec.get("reject", 0), "r"),
              ("Tekrar (elendi)", by_dec.get("duplicate", 0), "w"),
-             ("Denenen aile", fams, "b")]
+             ("Farklı yapı", structures, "b"), ("Denenen aile", fams, "b")]
     return '<div class="tiles">' + "".join(
         f'<div class="tile {c}"><div class="n">{v}</div><div class="l">{_esc(l)}</div></div>'
         for l, v, c in items) + "</div>"
@@ -565,8 +568,10 @@ def generate_dashboard(memory_db: str, holdout_db: str, out_path: str,
         f'<p class="lead">Kampanya: <b>{_esc(campaign_name)}</b> · Oluşturma: {ts}</p>',
         _banner(conn, holdout_db),
         _section("Kampanya Özeti",
-                 "Bu turda üretilen hipotezlerin karar dağılımı.",
-                 _tiles(conn)),
+                 "Bu turda üretilen hipotezlerin karar dağılımı. 'Farklı yapı' = "
+                 "pencereden bağımsız kaç farklı strateji YAPISI üretildi (yalnız "
+                 "pencere değişikliği aynı yapı sayılır — gerçek çeşitlilik ölçüsü).",
+                 _tiles(conn, memory_db)),
         _section("Araştırma Hunisi — Hipotezler Nerede Elendi?",
                  "Her hipotez soldan sağa bu aşamalardan geçer; bir aşamada elenirse "
                  "orada durur. Kırmızı = elendi, mavi = tekrar, yeşil = kabul. "

@@ -154,6 +154,12 @@ def _build_context(cfg: CampaignConfig, memory: MemoryStore, remaining: int,
     ]
     lessons = build_lessons(memory.family_stats())
     procedural = build_procedural_lessons(memory)   # Doküman 12.3 (hangi hamle işe yarıyor)
+    # AZ KEŞFEDİLMİŞ AİLELER (çeşitlilik için): hiç/az backtest'lenmiş aileler.
+    # Duplicate churn'ün kökü, LLM'in dar bir komşuluğa (ör. volatilite-reversal)
+    # sıkışması; bunları öne sürerek keşfi genişletiriz (Doküman 4.3 keşif).
+    counts = memory.family_outcome_counts()
+    underexplored = [f.value for f in HypothesisFamily
+                     if counts.get(f.value, (0, 0))[1] < 2]
     # LLM'e giden evren tarifi: anonimleştirme açıksa ticker/tarih İÇERMEZ.
     llm_universe = ANONYMOUS_UNIVERSE if cfg.anonymize_universe else cfg.universe_description
     return ResearchContext(
@@ -167,6 +173,7 @@ def _build_context(cfg: CampaignConfig, memory: MemoryStore, remaining: int,
         prior_experiments=priors,
         lessons=lessons,
         procedural_lessons=procedural,
+        underexplored_regions=underexplored,
         generation_mode=mode,
         parent_hypothesis=parent,
         parent_hypothesis_b=parent_b,

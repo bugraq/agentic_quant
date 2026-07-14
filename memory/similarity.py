@@ -58,6 +58,37 @@ def _tokens(expr: Expression) -> Counter:
     return tok
 
 
+def structure_signature(expr: Expression) -> str:
+    """Sinyal ağacının PENCEREDEN BAĞIMSIZ yapısal imzası.
+
+    Yalnızca pencere uzunluğunda farklılaşan iki strateji (60g vs 90g momentum)
+    AYNI yapıdır. 'Farklı strateji yapısı sayısı' metriği bununla ölçülür
+    (MVP kriter 3). Operatör adları, alanlar ve ağaç şekli korunur; window değil.
+    """
+    if expr.op == "field":
+        return f"field:{expr.field}"
+    if expr.op == "const":
+        return "const"
+    if expr.op == "feature_ref":
+        return f"ref:{expr.name}"
+    inner = ",".join(
+        structure_signature(c if isinstance(c, Expression)
+                            else Expression(op="feature_ref", name=c))
+        for c in expr.inputs)
+    return f"{expr.op}({inner})"
+
+
+def hypothesis_structure(hyp: HypothesisSpec) -> str:
+    """Hipotezin tam yapısal imzası: sinyal + (varsa) feature ifadeleri."""
+    feats = ";".join(sorted(structure_signature(f.expression) for f in hyp.features))
+    return structure_signature(hyp.signal) + ("|" + feats if feats else "")
+
+
+def count_distinct_structures(hyps: "list[HypothesisSpec]") -> int:
+    """Bir hipotez listesindeki FARKLI yapı sayısı (pencereden bağımsız)."""
+    return len({hypothesis_structure(h) for h in hyps})
+
+
 def _jaccard(a: Counter, b: Counter) -> float:
     inter = sum((a & b).values())
     union = sum((a | b).values())

@@ -177,8 +177,13 @@ HİPOTEZ B:
                 f"'regime_conditioned' için conditional/volatilite kullan. Eğer bu "
                 f"aileyi dürüstçe uygulayamıyorsan, sinyaline UYAN family'yi seç.")
     else:
-        task = """GÖREV — YENİ: Derslere göre UMUT VERİCİ aileyi seç ya da hiç
-denenmemiş bir yön keşfet. ZAYIF aileleri (dersteki uyarılar) tekrarlama."""
+        under = ", ".join(ctx.underexplored_regions) if ctx.underexplored_regions else ""
+        under_hint = (f" ÖNCELİK: şu aileler bu kampanyada HİÇ/AZ denendi — "
+                      f"bunlardan birini GERÇEKTEN uygula: {under}." if under else "")
+        task = (f"""GÖREV — YENİ: Derslere göre UMUT VERİCİ aileyi seç ya da hiç
+denenmemiş bir yön keşfet. ZAYIF/DOYGUN aileleri (dersteki uyarılar) tekrarlama.{under_hint}
+Sıkışıp aynı fikri (ör. volatilite-koşullu reversal) tekrar tekrar üretme —
+yapısal olarak FARKLI bir mekanizma dene.""")
 
     lit_block = (f"\nLİTERATÜR (web'den gerçek faktörler — bunlardan İLHAM al, "
                  f"DSL ile uygula):\n{literature}\n" if literature else "")

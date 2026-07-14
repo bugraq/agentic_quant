@@ -137,6 +137,21 @@ class MemoryStore:
         return [r[0] for r in self.conn.execute(
             "SELECT hypothesis_json FROM experiment WHERE hypothesis_json IS NOT NULL")]
 
+    def distinct_structure_count(self) -> int:
+        """Üretilen FARKLI strateji yapısı sayısı (pencereden bağımsız; MVP kriter 3).
+
+        Parametre varyantları (yalnız pencere farkı) tek yapı sayılır — gerçek
+        yapısal çeşitliliği ölçer.
+        """
+        from memory.similarity import count_distinct_structures
+        specs = []
+        for hj in self.all_hypothesis_jsons():
+            try:
+                specs.append(HypothesisSpec.model_validate_json(hj))
+            except Exception:  # noqa: BLE001
+                pass
+        return count_distinct_structures(specs)
+
     def leaderboard(self, limit: int = 10) -> list[tuple]:
         """Kabul edilenler, Sharpe'a göre (Doküman: campaign leaderboard)."""
         return self.conn.execute(
