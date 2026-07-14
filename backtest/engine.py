@@ -166,8 +166,11 @@ def compute_pnl(signal, hyp: HypothesisSpec, data: MarketData, cost_bps: float):
 
     gross_pnl = (weights.shift(bar_offset + 1) * exec_ret).sum(axis=1)
     turnover_t = (weights - weights.shift(1)).abs().sum(axis=1)
-    # Maliyet işlem anına yazılır (sinyal barından bar_offset sonra).
-    cost_t = turnover_t.shift(bar_offset) * (cost_bps / 1e4)
+    # Maliyet, o turnover'ı yaratan pozisyonun GETİRİ kazanmaya başladığı barla
+    # AYNI hizada yazılır: gross weights.shift(bar_offset+1) kullandığı için
+    # maliyet de turnover.shift(bar_offset+1) olmalı (aksi halde maliyet, ilgili
+    # pozisyon getiriyi kazanmadan BİR BAR önce düşer — sayısal test doğruladı).
+    cost_t = turnover_t.shift(bar_offset + 1) * (cost_bps / 1e4)
     net_pnl = (gross_pnl - cost_t).dropna()
     return net_pnl, turnover_t
 
