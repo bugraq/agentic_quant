@@ -17,6 +17,7 @@ from dsl.operators import (
     CROSS,
     DATA_FIELDS,
     FIELD_BASE_TICK,
+    NO_INPUT_BASE_TICK,
     SCALAR,
     SERIES,
     get_operator,
@@ -108,8 +109,10 @@ class _Builder:
         if expr.op == "conditional":
             self.conditions += 1
 
-        # info_tick hesabı
-        base_tick = max(child_ticks) if child_ticks else 0
+        # info_tick hesabı. Girdisiz türetilmiş-alan operatörleri (intraday_range,
+        # close_location) high/low/close okur -> close_t'de bilinir (tick 1).
+        base_tick = (max(child_ticks) if child_ticks
+                     else NO_INPUT_BASE_TICK.get(expr.op, 0))
         if spec.is_lag:
             k = int(window or 0)
             info_tick = base_tick - 2 * k   # lag GERİYE kaydırır (güvenli yön)

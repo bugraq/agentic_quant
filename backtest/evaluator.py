@@ -86,6 +86,18 @@ def _eval_node(node: GraphNode, vals: dict[str, Value], data: MarketData) -> Val
         return (x - m) / s
     if op == "volatility":
         return x.pct_change(fill_method=None).rolling(w).std()
+    # --- gün-içi (high/low) türetilmiş; GİRDİSİZ, high/low/close'u kendi okur ---
+    if op == "intraday_range":
+        # Gün-içi aralık / fiyat (ölçek-bağımsız oynaklık-likidite vekili).
+        rng = (data.get("high") - data.get("low")) / data.get("close")
+        return rng.rolling(w).mean() if w else rng
+    if op == "close_location":
+        # Kapanışın gün-içi aralıktaki yeri [0,1]: 1=tepeye yakın (alım baskısı),
+        # 0=dibe yakın (satış baskısı). high==low günü NaN (aralık sıfır).
+        hl = data.get("high") - data.get("low")
+        loc = (data.get("close") - data.get("low")) / hl.where(hl != 0)
+        loc = loc.clip(0.0, 1.0)
+        return loc.rolling(w).mean() if w else loc
     if op == "correlation":
         return ins[0].rolling(w).corr(ins[1])
     if op == "residual_return":

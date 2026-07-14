@@ -63,6 +63,15 @@ FIELD_BASE_TICK: dict[str, int] = {
 }
 DATA_FIELDS = set(FIELD_BASE_TICK.keys())
 
+# GİRDİSİZ (0-arity) türetilmiş-alan operatörlerinin taban tick'i. Compiler
+# child_tick'i olmayan düğüme normalde 0 (open_t) verir; bu operatörler high/low/
+# close okuduğu için değerleri close_t'de (tick 1) bilinir — yoksa sızıntı-validatör
+# yanlışlıkla 'open_t'de biliniyor' der ve close_t işlemine izin verirdi.
+NO_INPUT_BASE_TICK: dict[str, int] = {
+    "intraday_range": FIELD_BASE_TICK["close"],
+    "close_location": FIELD_BASE_TICK["close"],
+}
+
 
 def _reg(*specs: OperatorSpec) -> dict[str, OperatorSpec]:
     return {s.name: s for s in specs}
@@ -83,6 +92,11 @@ REGISTRY: dict[str, OperatorSpec] = _reg(
     OperatorSpec("zscore", SERIES, BACKWARD, 1, 1, needs_window=True, accepts=(SERIES,)),
     OperatorSpec("volatility", SERIES, BACKWARD, 1, 1, needs_window=True, accepts=(SERIES,)),
     OperatorSpec("correlation", SERIES, BACKWARD, 2, 2, needs_window=True, accepts=(SERIES,)),
+    # Gün-içi (high/low) türetilmiş — GİRDİ ALMAZ, high/low/close'u kendisi okur.
+    # window verilirse rolling ortalama (ATR-benzeri düzleştirme). Aynı-bar bilgisi
+    # close_t'de bilinir (NO_INPUT_BASE_TICK), gün-içi aralık YENİ bilgi kaynağıdır.
+    OperatorSpec("intraday_range", SERIES, BACKWARD, 0, 0, needs_window=False, accepts=()),
+    OperatorSpec("close_location", SERIES, BACKWARD, 0, 0, needs_window=False, accepts=()),
     OperatorSpec("residual_return", SERIES, BACKWARD, 0, 1, needs_window=True, accepts=(SERIES,)),
     # Kesitsel (aynı an, tüm varlıklar)
     OperatorSpec("cross_sectional_rank", CROSS, POINTWISE, 1, 1, accepts=(SERIES, CROSS)),

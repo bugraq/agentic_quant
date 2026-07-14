@@ -44,6 +44,9 @@ campaign:
     - winsorize
     - normalize
     - demean
+    # gün-içi (high/low) — kullanılmayan intraday bilgiyi açar
+    - intraday_range      # (high-low)/close: oynaklık/likidite vekili
+    - close_location      # (close-low)/(high-low): gün-içi alım/satış baskısı
     # koşullama / rejim
     - conditional
     - greater_than

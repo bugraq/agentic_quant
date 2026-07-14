@@ -316,6 +316,10 @@ def _describe_node(e: dict, feats: dict) -> str:
         return f"eğer {a} ise {b}, değilse {c}"
     if op == "correlation":
         return f"{a} ile {b} korelasyonu ({gun})"
+    if op == "intraday_range":
+        return f"gün-içi fiyat aralığı (yüksek-düşük)/kapanış{(' — ' + gun + ' ort') if gun else ''}"
+    if op == "close_location":
+        return f"kapanışın gün-içi aralıktaki yeri (tepeye/dibe yakınlık){(' — ' + gun + ' ort') if gun else ''}"
     return f"{op}({a})"
 
 

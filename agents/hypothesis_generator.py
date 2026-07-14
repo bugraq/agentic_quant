@@ -104,6 +104,12 @@ KRİTİK KURALLAR (yoksa hipotez reddedilir):
     Volatilite eşiği için volatility operatörünü (getiri bazlı) kullan; daha da
     iyisi sabit eşik yerine KESİTSEL karşılaştırma kur (örn. quantile/
     cross_sectional_rank ile "evrenin medyanından yüksek volatilite").
+  - intraday_range ve close_location GİRDİSİZdir (inputs boş [] olmalı) — high/
+    low/close'u kendileri okur. window OPSİYONELdir (verilirse rolling ortalama).
+    intraday_range=(high-low)/close gün-içi oynaklık; close_location=(close-low)/
+    (high-low) gün-içi alım baskısı. Ör: {{"op":"cross_sectional_rank","inputs":[
+    {{"op":"close_location","window":5}}]}}. Bu high/low sinyalleri AZ denendi —
+    çeşitlilik için değerli.
   - conditional TAM 3 girdi alır ve sırası şudur: [koşul, koşul-doğruysa-değer,
     koşul-yanlışsa-değer]. Örn. yüksek volatilitede reversal, düşükte momentum:
     {{"op":"conditional","inputs":[
