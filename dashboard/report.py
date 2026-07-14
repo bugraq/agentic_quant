@@ -336,6 +336,7 @@ _REASON_TR = {
     "disallowed_operator": "İzin verilmeyen operatör kullandı",
     "yapısal_duplicate": "Daha önce denenen bir stratejiyle aynı (yapısal tekrar)",
     "davranışsal_duplicate": "Başka bir stratejiyle neredeyse aynı sinyali üretti (tekrar)",
+    "metinsel_duplicate": "Açıklaması daha önceki bir hipotezle neredeyse aynı (metinsel tekrar)",
     "not_robust": "Sağlamlık testlerini geçemedi (şansa/ayara aşırı bağımlı)",
     "claim_signal_mismatch": "İddia ile sinyal uyuşmuyor (critic reddi)",
     "sharpe_below_threshold": "Getiri/risk (Sharpe) eşiğin altında",

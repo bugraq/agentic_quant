@@ -293,6 +293,16 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
                     slot_was_duplicate = True
                     continue
 
+            # 3a1) Metinsel yenilik (Doküman 14.1) — açıklama near-verbatim aynı mı.
+            # Aynı fikri hemen hemen aynı kelimelerle tekrar etmeyi yakalar.
+            dup = novelty.check_textual(hyp)
+            if dup:
+                rec(hyp, _duplicate_decision(hyp, dup, "metinsel"), STAGE_DUPLICATE)
+                print(f"{tag} -> DUPLICATE (metinsel, ~{dup}) — yeniden üretim istenecek")
+                dup_feedback.append(f"{hyp.title} (~{dup} ile aynı açıklama)")
+                slot_was_duplicate = True
+                continue
+
             # 3a2) Quant Critic — BAĞIMSIZ ekonomik inceleme (backtest'ten önce)
             try:
                 crit = critic.review(hyp)
