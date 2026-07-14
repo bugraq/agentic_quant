@@ -21,12 +21,21 @@ _SYSTEM = ("Sen bir kantitatif finans literatürü araştırmacısısın. Web'de
 def fetch_literature_mechanisms(client: OpenAICompatibleClient, model: str,
                                 universe_description: str, n: int = 6) -> list[str]:
     """Web araması ile n adet gerçek faktör/mekanizma (tek satırlık) döndürür."""
+    # ÇEŞİTLİLİK ZORLAMASI: her koşuda hacim/reversal ağırlıklı liste dönüyordu,
+    # bu da LLM'i tek komşuluğa itiyordu. Artık her FARKLI mekanizma kategorisinden
+    # BİRER tane isteniyor — böylece hipotez üreticiye çeşitli tohumlar gider.
     user = (f"Evren: {universe_description}\n\n"
             f"Web'de ara ve kesitsel hisse getirisini öngördüğü akademik olarak "
             f"belgelenmiş, YALNIZCA fiyat ve hacim (close, open, high, low, volume, "
-            f"dollar_volume) ile hesaplanabilen {n} anomali bul.\n"
-            f"ÖRNEK uygun anomaliler: momentum, kısa vadeli reversal, düşük "
-            f"volatilite, hacim/likidite, 52-hafta yüksek, fiyat-hacim etkileşimi.\n"
+            f"dollar_volume) ile hesaplanabilen anomaliler bul.\n"
+            f"ÖNEMLİ: Aşağıdaki {n} FARKLI kategoriden HER BİRİNDEN tam olarak BİR "
+            f"anomali ver (çeşitlilik şart, hepsi hacim/reversal OLMASIN):\n"
+            f"  1) Zaman-serisi/kesitsel MOMENTUM (orta vade trend devamı)\n"
+            f"  2) Kısa vadeli REVERSAL (aşırı tepki geri dönüşü)\n"
+            f"  3) VOLATİLİTE tabanlı (düşük-vol primi / vol değişimi)\n"
+            f"  4) HACİM/LİKİDİTE (anormal hacim, likidite primi)\n"
+            f"  5) FİYAT-SEVİYE (52-hafta yüksek/dip, gün-içi aralık/high-low)\n"
+            f"  6) MEVSİMSELLİK/TAKVİM (haftanın günü, ay-sonu, momentum-sezonu)\n"
             f"YASAK (temel veri gerektirir, LİSTELEME): Value, Book-to-Market, "
             f"Profitability, Investment, kazanç/bilanço temelli faktörler.\n"
             f"Her biri için TEK satır: 'Anomali adı — kısa mekanizma "

@@ -145,11 +145,19 @@ def _decide_mode(iteration: int, memory: MemoryStore):
                     HypothesisSpec.model_validate_json(failed[0]), None, champ_sharpe)
 
     if want == GenerationMode.combination:
-        top = memory.accepted_hypotheses(limit=2)
-        if len(top) >= 2:
-            pa = HypothesisSpec.model_validate_json(top[0][1])
-            pb = HypothesisSpec.model_validate_json(top[1][1])
-            return GenerationMode.combination, pa, pb, champ_sharpe
+        # Combination YALNIZCA yapısal olarak FARKLI iki kabul varsa anlamlı.
+        # Aksi halde (ör. tüm kabuller aynı reversal yapısı) birleştirme hep aynı
+        # yapıyı üretip garantili duplicate olur — gerçek koşuda 27 denemenin 0'ı
+        # kabuldü, bütçe boşa yandı. Farklı yapı yoksa keşfe (new) düş.
+        from memory.similarity import hypothesis_structure
+        accepts = memory.accepted_hypotheses(limit=10)
+        if len(accepts) >= 2:
+            specs = [HypothesisSpec.model_validate_json(j) for _h, j, _s in accepts]
+            pa = specs[0]
+            sa = hypothesis_structure(pa)
+            pb = next((s for s in specs[1:] if hypothesis_structure(s) != sa), None)
+            if pb is not None:
+                return GenerationMode.combination, pa, pb, champ_sharpe
 
     # want == new, ya da istenen mod için aday yok -> keşif.
     return GenerationMode.new, None, None, champ_sharpe
