@@ -70,6 +70,7 @@ td.num { text-align:right; font-variant-numeric:tabular-nums; }
 .pill { padding:2px 9px; border-radius:20px; font-size:11px; font-weight:700; }
 .pill.good { background:rgba(63,185,80,.16); color:var(--good); }
 .pill.bad { background:rgba(248,81,73,.16); color:var(--bad); }
+.pill.warn { background:rgba(210,153,34,.16); color:var(--warn); }
 .pill.muted { background:var(--border); color:var(--muted); }
 .detail { background:var(--card); border:1px solid var(--border); border-radius:10px;
   padding:14px 16px; margin-bottom:12px; }
@@ -463,6 +464,60 @@ def _lineage(conn) -> str:
             '<th>Türev</th><th>Sonuç</th></tr>' + body + "</table></div>")
 
 
+def _render_report(rep: dict) -> str:
+    """Bir ReviewReport (dict) -> renkli kontrol listesi HTML."""
+    pill = {"ok": "good", "warn": "warn", "fail": "bad"}
+    label = {"ok": "TEMİZ", "warn": "DİKKAT", "fail": "SORUN"}
+    v = rep.get("verdict", "ok")
+    head = (f'<div class="drow"><b>{_esc(rep.get("reviewer",""))}:</b> '
+            f'<span class="pill {pill.get(v,"muted")}">{label.get(v, v)}</span></div>')
+    items = "".join(
+        f'<div class="drow" style="margin-left:10px">'
+        f'<span class="pill {pill.get(c.get("status"),"muted")}">'
+        f'{_esc(c.get("status"))}</span> '
+        f'<b>{_esc(c.get("name"))}:</b> {_esc(c.get("detail"))}</div>'
+        for c in rep.get("checks", []))
+    return head + items
+
+
+def _reviewers(memory_db: str) -> str:
+    """Bağımsız reviewer ajanları (Doküman 15): Backtest Auditor + Statistical Reviewer.
+
+    Auditor raporu kabul sırasında saklanır (reviews_json); Statistical Reviewer
+    çoklu-test satırından rapor-zamanı hesaplanır.
+    """
+    from agents.statistical_reviewer import StatisticalReviewer
+
+    store = MemoryStore(memory_db)
+    rows = build_report(store.backtested_experiments())
+    store.close()
+    stat_by_hid = {r.hypothesis_id: r for r in rows}
+
+    conn = sqlite3.connect(memory_db)
+    accepted = _q(conn, """SELECT hypothesis_id, title, reviews_json FROM experiment
+                           WHERE decision='accept' ORDER BY sharpe DESC LIMIT 6""")
+    conn.close()
+    if not accepted:
+        return '<div class="card desc">Kabul edilmiş strateji yok — reviewer raporu üretilmedi.</div>'
+
+    reviewer = StatisticalReviewer()
+    cards = []
+    for hid, title, reviews_json in accepted:
+        blocks = []
+        if reviews_json:
+            try:
+                for rep in json.loads(reviews_json):
+                    blocks.append(_render_report(rep))
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if hid in stat_by_hid:
+            blocks.append(_render_report(reviewer.review(stat_by_hid[hid]).model_dump()))
+        cards.append(f'<div class="detail"><div class="dh">'
+                     f'<span class="did">{_esc(hid)}</span> {_esc(title)}</div>'
+                     + "".join(blocks) + "</div>")
+    return "".join(cards)
+
+
 def _families(conn) -> str:
     rows = _q(conn, """SELECT family,
                          SUM(CASE WHEN decision='accept' THEN 1 ELSE 0 END),
@@ -519,6 +574,12 @@ def generate_dashboard(memory_db: str, holdout_db: str, out_path: str,
                  "Deflated Sharpe (DSR) ve FDR bunu düzeltir: FDR 'GEÇTİ' değilse sonuç "
                  "istatistiksel olarak kanıtlanmış sayılmaz.",
                  _multiple_testing(memory_db)),
+        _section("Bağımsız Reviewer Ajanları (Doküman 15)",
+                 "Üretici LLM'den AYRI, deterministik iki denetçi. Backtest Auditor "
+                 "backtest'in GEÇERLİLİĞİNİ denetler (sızıntı/survivorship/maliyet/"
+                 "likidite); Statistical Reviewer 'kabul' ile 'istatistiksel doğrulandı'yı "
+                 "ayırır (FDR/DSR/güven aralığı/fold). TEMİZ/DİKKAT/SORUN her kontrol için.",
+                 _reviewers(memory_db)),
         _section("Çok Amaçlı Sıralama (Pareto)",
                  "Kabul edilen stratejiler tek Sharpe ile değil; Sharpe alt güven "
                  "sınırı, drawdown ve turnover birlikte değerlendirilir. Pareto-optimal "

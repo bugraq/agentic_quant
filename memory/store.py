@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS experiment (
     -- Lineage (Doküman 13) — hipotez soy ağacı
     parent_hypothesis_id TEXT,
     relation_type   TEXT,          -- refinement / inversion / combination / parameter_variant
+    reviews_json    TEXT,          -- reviewer ajan raporları (Doküman 15)
     created_at      TEXT
 );
 """
@@ -67,13 +68,22 @@ class MemoryStore:
     def __init__(self, path: str = "research_memory.sqlite") -> None:
         self.conn = sqlite3.connect(path)
         self.conn.execute(_SCHEMA)
+        self._migrate()
         self.conn.commit()
+
+    def _migrate(self) -> None:
+        """Eski DB'lere sonradan eklenen kolonları getir (geriye uyum)."""
+        have = {r[1] for r in self.conn.execute("PRAGMA table_info(experiment)")}
+        for col, decl in [("reviews_json", "TEXT")]:
+            if col not in have:
+                self.conn.execute(f"ALTER TABLE experiment ADD COLUMN {col} {decl}")
 
     def record(self, hyp: HypothesisSpec, decision: Decision, stage: str,
                result: Optional[BacktestResult] = None,
                llm_meta: Optional[dict] = None,
                parent_hypothesis_id: Optional[str] = None,
-               relation_type: Optional[str] = None) -> int:
+               relation_type: Optional[str] = None,
+               reviews: Optional[list] = None) -> int:
         sharpe = max_dd = turnover = None
         seed = None
         returns_json = None
@@ -84,13 +94,16 @@ class MemoryStore:
             seed = result.seed
             returns_json = json.dumps(result.net_returns)
         m = llm_meta or {}
+        reviews_json = json.dumps(
+            [r.model_dump() if hasattr(r, "model_dump") else r for r in reviews]
+        ) if reviews else None
         cur = self.conn.execute(
             """INSERT INTO experiment
                (hypothesis_id, title, family, stage, decision, decision_source,
                 sharpe, max_drawdown, turnover, seed, issues_json, hypothesis_json,
                 returns_json, model_name, temperature, prompt_hash, output_hash,
-                parent_hypothesis_id, relation_type, created_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                parent_hypothesis_id, relation_type, reviews_json, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (hyp.hypothesis_id, hyp.title, hyp.family.value, stage,
              decision.decision.value, decision.source.value,
              sharpe, max_dd, turnover, seed,
@@ -98,7 +111,7 @@ class MemoryStore:
              hyp.model_dump_json(), returns_json,
              m.get("model_name"), m.get("temperature"), m.get("prompt_hash"),
              m.get("output_hash"), parent_hypothesis_id, relation_type,
-             datetime.now(timezone.utc).isoformat()),
+             reviews_json, datetime.now(timezone.utc).isoformat()),
         )
         self.conn.commit()
         return cur.lastrowid

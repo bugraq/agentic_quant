@@ -165,7 +165,9 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
                  memory: MemoryStore, cfg: CampaignConfig, critic=None,
                  literature: list[str] | None = None) -> None:
     from agents.quant_critic import DummyCritic
+    from agents.backtest_auditor import BacktestAuditor
     critic = critic or DummyCritic()
+    auditor = BacktestAuditor()   # bağımsız deterministik backtest denetçisi (Doküman 15)
 
     # DEVAM (resume): ID sayacını ve NoveltyIndex'i hafızadan yeniden kur, böylece
     # önceki koşularla aynı hipotez tekrar üretilmez ve numaralar çakışmaz.
@@ -398,6 +400,9 @@ def run_campaign(provider: HypothesisProvider, data: MarketData,
                     hyp, result, gate = opt_hyp, res2, gate2
                     sharpe = result.aggregate_sharpe() or 0.0
 
-        rec(hyp, gate, STAGE_ACCEPTED, result=result)
+        # BACKTEST AUDITOR (Doküman 15) — kabul edilen stratejinin backtest
+        # GEÇERLİLİĞİNİ bağımsız denetler (sızıntı/survivorship/maliyet/likidite).
+        audit = auditor.audit(hyp, result, data, cfg.cost_bps)
+        memory.record(hyp, gate, STAGE_ACCEPTED, result=result, reviews=[audit], **meta)
         print(f"{tag} -> KABUL (Sharpe {sharpe:.2f}, perm_p={rob.permutation_pvalue:.2f}, "
-              f"cost2x={rob.cost2x_sharpe:.2f})")
+              f"cost2x={rob.cost2x_sharpe:.2f}, audit={audit.verdict.value})")
